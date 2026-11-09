@@ -4,11 +4,17 @@
 
 const MIN_MESSAGE_LENGTH = 10;
 const STATUS_AWAITING = "Awaiting Classification";
-const CATEGORY_PLACEHOLDER = "Category: not assigned";
 
 // Demo data, only for showing the UI. Clearly marked with demo: true.
+// category and confidence (0-100, in percent) will come from the backend in phase 2.
 const demoReview = [
-  { id: "DEMO-3", message: "I am not sure what happened, but something is wrong with my account.", demo: true },
+  {
+    id: "DEMO-3",
+    message: "I am not sure what happened, but something is wrong with my account.",
+    category: "Account",
+    confidence: 62,
+    demo: true,
+  },
 ];
 
 const state = {
@@ -36,6 +42,14 @@ async function submitTicket(message) {
 
 // --- Rendering ------------------------------------------------------------
 
+// Small chip like "Category: Account". Without a value it shows a dashed placeholder.
+function createChip(label, value) {
+  const chip = document.createElement("span");
+  chip.className = value == null ? "chip chip-empty" : "chip";
+  chip.textContent = `${label}: ${value ?? "–"}`;
+  return chip;
+}
+
 function createTicketCard(ticket) {
   const card = document.createElement("li");
   card.className = "ticket";
@@ -51,14 +65,13 @@ function createTicketCard(ticket) {
   badge.className = ticket.demo ? "badge badge-demo" : "badge badge-pending";
   badge.textContent = ticket.demo ? "Demo data" : ticket.status;
 
-  const category = document.createElement("span");
-  category.className = "chip-category";
-  category.textContent = CATEGORY_PLACEHOLDER;
+  const category = createChip("Category", ticket.category);
+  const confidence = createChip("Confidence", ticket.confidence == null ? null : `${ticket.confidence}%`);
 
   // Chips sit on the right side of the header row to keep the card short.
   const chips = document.createElement("div");
   chips.className = "ticket-chips";
-  chips.append(category, badge);
+  chips.append(category, confidence, badge);
 
   head.append(id, chips);
 
