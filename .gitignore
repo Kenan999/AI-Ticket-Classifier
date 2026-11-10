@@ -1,0 +1,11 @@
+.venv/
+.DS_Store
+__pycache__/
+.env
+
+# Raw dataset is downloaded locally with backend/download_data.py
+data/
+
+*.py[cod]
+.pytest_cache/
+results/
