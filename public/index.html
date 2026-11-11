@@ -38,6 +38,13 @@
             aria-describedby="form-error"
           ></textarea>
           <p id="form-error" class="form-error" role="alert" hidden></p>
+
+          <!-- Development helper: fills the text field with an example ticket -->
+          <div class="dev-examples">
+            <p class="dev-label">Dev: example tickets</p>
+            <div id="example-buttons" class="example-buttons"></div>
+          </div>
+
           <button type="submit">Send message</button>
           <div id="form-success" class="form-success" role="status" hidden>
             <strong>Thank you for your request.</strong>

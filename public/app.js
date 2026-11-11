@@ -1,15 +1,30 @@
 // Shoply – frontend.
-// The backend connection is added step by step. Until then, submitted tickets
-// are only simulated in the browser and are lost on reload.
+// The backend connection is added step by step. So far: GET /health and POST /classify.
+// Tickets are kept in the browser only and are gone after a reload.
 
 // Backend API address. Change it here if the backend runs somewhere else.
 const API_BASE_URL = "http://127.0.0.1:8001";
 
 const MIN_MESSAGE_LENGTH = 10;
-const STATUS_AWAITING = "Awaiting Classification";
+
+// Backend status values and how we show them.
+const STATUS_HUMAN_REVIEW = "human_review";
+const STATUS_LABELS = {
+  classified: "Classified",
+  human_review: "Needs review",
+};
+
+// Development helper: one example ticket per MVP category, for the buttons under the form.
+const EXAMPLE_TICKETS = [
+  { label: "Delivery", text: "Where is my delivery? My package was supposed to arrive three days ago." },
+  { label: "Refund", text: "I want a refund, my item arrived damaged and I need to return it." },
+  { label: "Payment", text: "My payment failed and my card was charged twice, please check my payment." },
+  { label: "Order", text: "I want to change my order, I ordered the wrong size." },
+  { label: "Account", text: "I cannot log in to my account, I forgot my password." },
+];
 
 // Demo data, only for showing the UI. Clearly marked with demo: true.
-// category and confidence (0-100, in percent) will come from the backend in phase 2.
+// Confidence is shown in percent (0-100).
 const demoReview = [
   {
     id: "DEMO-3",
@@ -21,7 +36,6 @@ const demoReview = [
 ];
 
 const state = {
-  nextTicketNumber: 1001,
   classified: [],
   review: [...demoReview],
 };
@@ -34,6 +48,8 @@ const successDetail = document.getElementById("success-detail");
 const classifiedList = document.getElementById("classified-list");
 const reviewList = document.getElementById("review-list");
 const backendStatus = document.getElementById("backend-status");
+const submitButton = form.querySelector("button[type=submit]");
+const submitLabel = submitButton.textContent;
 
 // --- Backend API ----------------------------------------------------------
 
@@ -81,11 +97,22 @@ function setBackendStatus(state, text) {
 
 // --- Ticket submission --------------------------------------------------
 
-// Simulated submission. In phase 2, replace the body with a call to the
-// backend, e.g. fetch("/api/tickets", { method: "POST", body: ... }).
+// POST /classify: sends the ticket text to the backend. The backend creates the
+// ticket id and answers with category, confidence (0-1) and status.
 async function submitTicket(message) {
-  const id = `T-${state.nextTicketNumber++}`;
-  return { id, message, status: STATUS_AWAITING, demo: false };
+  const result = await apiRequest("/classify", {
+    method: "POST",
+    body: JSON.stringify({ text: message }),
+  });
+
+  return {
+    id: result.ticket_id,
+    message: result.text,
+    category: result.category,
+    confidence: Math.round(result.confidence * 100), // 0.62 -> 62 (%)
+    status: result.status,
+    demo: false,
+  };
 }
 
 // --- Rendering ------------------------------------------------------------
@@ -111,7 +138,7 @@ function createTicketCard(ticket) {
 
   const badge = document.createElement("span");
   badge.className = ticket.demo ? "badge badge-demo" : "badge badge-pending";
-  badge.textContent = ticket.demo ? "Demo data" : ticket.status;
+  badge.textContent = ticket.demo ? "Demo data" : (STATUS_LABELS[ticket.status] ?? ticket.status);
 
   const category = createChip("Category", ticket.category);
   const confidence = createChip("Confidence", ticket.confidence == null ? null : `${ticket.confidence}%`);
@@ -181,18 +208,50 @@ form.addEventListener("submit", async (event) => {
   }
 
   clearError();
+  successEl.hidden = true;
 
-  const ticket = await submitTicket(message);
-  state.classified.unshift(ticket); // newest first
-  renderDashboard();
+  // Loading state: the button is blocked until the backend has answered.
+  submitButton.disabled = true;
+  submitButton.textContent = "Sending…";
 
-  form.reset();
-  successDetail.textContent = `Ticket ${ticket.id} · Status: ${STATUS_AWAITING}`;
-  successEl.hidden = false;
+  try {
+    const ticket = await submitTicket(message);
+
+    // The backend decides where the ticket belongs. Newest first.
+    const list = ticket.status === STATUS_HUMAN_REVIEW ? state.review : state.classified;
+    list.unshift(ticket);
+    renderDashboard();
+
+    form.reset();
+    successDetail.textContent = `Ticket ${ticket.id}`;
+    successEl.hidden = false;
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = submitLabel;
+  }
 });
 
 messageInput.addEventListener("input", () => {
   if (!errorEl.hidden) clearError();
+});
+
+// Example buttons: put the example text into the field, the user sends it.
+const exampleButtons = document.getElementById("example-buttons");
+EXAMPLE_TICKETS.forEach((example) => {
+  const button = document.createElement("button");
+  button.type = "button"; // must not submit the form
+  button.className = "example-btn";
+  button.textContent = example.label;
+  button.title = example.text;
+  button.addEventListener("click", () => {
+    messageInput.value = example.text;
+    clearError();
+    successEl.hidden = true;
+    messageInput.focus();
+  });
+  exampleButtons.append(button);
 });
 
 renderDashboard();
