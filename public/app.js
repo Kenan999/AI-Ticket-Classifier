@@ -1,6 +1,9 @@
-// Shoply – frontend demo.
-// No backend yet: tickets only live in the browser and are lost on reload.
-// Classification and human-review routing will come from backend endpoints (phase 2).
+// Shoply – frontend.
+// The backend connection is added step by step. Until then, submitted tickets
+// are only simulated in the browser and are lost on reload.
+
+// Backend API address. Change it here if the backend runs somewhere else.
+const API_BASE_URL = "http://127.0.0.1:8001";
 
 const MIN_MESSAGE_LENGTH = 10;
 const STATUS_AWAITING = "Awaiting Classification";
@@ -30,6 +33,51 @@ const successEl = document.getElementById("form-success");
 const successDetail = document.getElementById("success-detail");
 const classifiedList = document.getElementById("classified-list");
 const reviewList = document.getElementById("review-list");
+const backendStatus = document.getElementById("backend-status");
+
+// --- Backend API ----------------------------------------------------------
+
+// One place for all backend requests. Returns the JSON answer, or throws an
+// Error with a short message that is safe to show to the user.
+async function apiRequest(path, options = {}) {
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      headers: options.body ? { "Content-Type": "application/json" } : {},
+      ...options,
+    });
+  } catch {
+    throw new Error("Backend not reachable. Please try again later.");
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch {
+    // The answer had no JSON body.
+  }
+
+  if (!response.ok) {
+    // The backend sends errors as { error: { code, message } }.
+    throw new Error(data?.error?.message ?? `Request failed (${response.status}).`);
+  }
+  return data;
+}
+
+// GET /health: shows in the dashboard header whether the backend is available.
+async function checkBackendHealth() {
+  try {
+    await apiRequest("/health");
+    setBackendStatus("online", "Backend online");
+  } catch {
+    setBackendStatus("offline", "Backend offline");
+  }
+}
+
+function setBackendStatus(state, text) {
+  backendStatus.dataset.state = state;
+  backendStatus.textContent = text;
+}
 
 // --- Ticket submission --------------------------------------------------
 
@@ -148,3 +196,4 @@ messageInput.addEventListener("input", () => {
 });
 
 renderDashboard();
+checkBackendHealth();

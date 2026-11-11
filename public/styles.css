@@ -229,6 +229,26 @@ button:hover {
   min-height: 0;
 }
 
+.staff-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Backend status pill: grey while checking, green when online, red when offline */
+.staff-pill[data-state="online"] {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.16);
+  color: #6ee7b7;
+}
+
+.staff-pill[data-state="offline"] {
+  border-color: rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.16);
+  color: #fca5a5;
+}
+
 .dash-section h3 {
   margin: 18px 0 10px;
   font-size: 0.8rem;
