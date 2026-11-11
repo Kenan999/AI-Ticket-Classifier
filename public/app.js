@@ -9,35 +9,34 @@ const MIN_MESSAGE_LENGTH = 10;
 
 // Backend status values and how we show them.
 const STATUS_HUMAN_REVIEW = "human_review";
+const STATUS_REVIEWED = "reviewed";
 const STATUS_LABELS = {
   classified: "Classified",
   human_review: "Needs review",
+  reviewed: "Manually reviewed",
 };
 
-// Development helper: one example ticket per MVP category, for the buttons under the form.
-const EXAMPLE_TICKETS = [
-  { label: "Delivery", text: "Where is my delivery? My package was supposed to arrive three days ago." },
-  { label: "Refund", text: "I want a refund, my item arrived damaged and I need to return it." },
-  { label: "Payment", text: "My payment failed and my card was charged twice, please check my payment." },
-  { label: "Order", text: "I want to change my order, I ordered the wrong size." },
-  { label: "Account", text: "I cannot log in to my account, I forgot my password." },
-];
+// Name sent to the backend as the reviewer (fixed for now).
+const REVIEWER_NAME = "support-agent";
 
-// Demo data, only for showing the UI. Clearly marked with demo: true.
-// Confidence is shown in percent (0-100).
-const demoReview = [
-  {
-    id: "DEMO-3",
-    message: "I am not sure what happened, but something is wrong with my account.",
-    category: "Account",
-    confidence: 62,
-    demo: true,
-  },
+// Categories a reviewer can choose from when correcting a ticket (same names as the backend).
+// General = fallback when the backend finds no keyword.
+const CATEGORIES = ["Returns", "Shipping", "Billing", "Account", "Technical", "Orders", "General"];
+
+// Development helper: one example ticket per backend category, for the buttons under the form.
+const EXAMPLE_TICKETS = [
+  { label: "Shipping", text: "Where is my delivery? My package was supposed to arrive three days ago." },
+  { label: "Returns", text: "I want a refund, my item arrived damaged and I need to return it." },
+  { label: "Billing", text: "My payment failed and my card was charged twice, please check my payment." },
+  { label: "Orders", text: "I want to cancel my order, please cancel the purchase." },
+  { label: "Account", text: "I cannot log in to my account, I forgot my password." },
+  // Unclear text: the backend is unsure, so the ticket lands in Human Review.
+  { label: "Human Review", text: "Something is odd, I do not know what to say here." },
 ];
 
 const state = {
   classified: [],
-  review: [...demoReview],
+  review: [],
 };
 
 const form = document.getElementById("ticket-form");
@@ -111,8 +110,23 @@ async function submitTicket(message) {
     category: result.category,
     confidence: Math.round(result.confidence * 100), // 0.62 -> 62 (%)
     status: result.status,
-    demo: false,
+    customerReply: result.customer_reply, // needed again when the ticket is corrected
   };
+}
+
+// POST /review: a human confirms ("approve") or changes ("correct") the category.
+// A correction needs the new category and the reply text for the customer.
+async function sendReview(ticket, newCategory) {
+  const body = {
+    ticket_id: ticket.id,
+    decision: newCategory ? "correct" : "approve",
+    reviewer: REVIEWER_NAME,
+  };
+  if (newCategory) {
+    body.final_category = newCategory;
+    body.customer_reply = ticket.customerReply;
+  }
+  await apiRequest("/review", { method: "POST", body: JSON.stringify(body) });
 }
 
 // --- Rendering ------------------------------------------------------------
@@ -137,8 +151,8 @@ function createTicketCard(ticket) {
   id.textContent = ticket.id;
 
   const badge = document.createElement("span");
-  badge.className = ticket.demo ? "badge badge-demo" : "badge badge-pending";
-  badge.textContent = ticket.demo ? "Demo data" : (STATUS_LABELS[ticket.status] ?? ticket.status);
+  badge.className = ticket.status === STATUS_HUMAN_REVIEW ? "badge badge-review" : "badge badge-pending";
+  badge.textContent = STATUS_LABELS[ticket.status] ?? ticket.status;
 
   const category = createChip("Category", ticket.category);
   const confidence = createChip("Confidence", ticket.confidence == null ? null : `${ticket.confidence}%`);
@@ -157,7 +171,76 @@ function createTicketCard(ticket) {
 
   card.append(head, message);
 
+  // Only tickets waiting for a human get the review buttons.
+  if (ticket.status === STATUS_HUMAN_REVIEW) {
+    card.append(createReviewActions(ticket));
+  }
+
   return card;
+}
+
+// Approve = category is right. Correct = category is wrong: a dropdown opens and
+// choosing a category sends the correction.
+function createReviewActions(ticket) {
+  const actions = document.createElement("div");
+  actions.className = "review-actions";
+
+  const approve = document.createElement("button");
+  approve.type = "button";
+  approve.className = "review-btn";
+  approve.textContent = "Approve";
+
+  const correct = document.createElement("button");
+  correct.type = "button";
+  correct.className = "review-btn review-btn-secondary";
+  correct.textContent = "Correct";
+
+  const select = document.createElement("select");
+  select.className = "review-select";
+  select.setAttribute("aria-label", "Choose the correct category");
+  select.append(new Option("Choose category…", ""));
+  CATEGORIES.forEach((name) => select.append(new Option(name, name)));
+  select.hidden = true; // shown after a click on Correct
+
+  const error = document.createElement("p");
+  error.className = "ticket-error";
+  error.hidden = true;
+
+  const controls = [approve, correct, select];
+  approve.addEventListener("click", () => handleReview(ticket, null, controls, error));
+  correct.addEventListener("click", () => {
+    correct.hidden = true;
+    select.hidden = false;
+    select.focus();
+  });
+  select.addEventListener("change", () => {
+    if (select.value !== "") handleReview(ticket, select.value, controls, error);
+  });
+
+  actions.append(approve, correct, select, error);
+  return actions;
+}
+
+// Sends the review. newCategory is null for "approve".
+async function handleReview(ticket, newCategory, controls, errorEl) {
+  errorEl.hidden = true;
+  controls.forEach((control) => (control.disabled = true));
+
+  try {
+    await sendReview(ticket, newCategory);
+
+    // Reviewed: the ticket leaves Human Review and moves to Classified.
+    state.review = state.review.filter((item) => item !== ticket);
+    if (newCategory) ticket.category = newCategory;
+    ticket.status = STATUS_REVIEWED;
+    state.classified.unshift(ticket);
+    renderDashboard();
+  } catch (error) {
+    errorEl.textContent = error.message;
+    errorEl.hidden = false;
+    controls.forEach((control) => (control.disabled = false));
+    controls[2].value = ""; // so the same category can be chosen again
+  }
 }
 
 function renderList(listEl, tickets, emptyText) {
@@ -175,6 +258,8 @@ function renderList(listEl, tickets, emptyText) {
 }
 
 function renderDashboard() {
+  document.getElementById("classified-count").textContent = state.classified.length;
+  document.getElementById("review-count").textContent = state.review.length;
   renderList(classifiedList, state.classified, "No tickets yet. New tickets will show up here.");
   renderList(reviewList, state.review, "No tickets need review.");
 }
