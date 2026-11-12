@@ -9,3 +9,6 @@ data/
 *.py[cod]
 .pytest_cache/
 results/
+
+# IDE-local project files
+.idea/
