@@ -1,6 +1,6 @@
 // Shoply – frontend.
-// The backend connection is added step by step. So far: GET /health and POST /classify.
-// Tickets are kept in the browser only and are gone after a reload.
+// The backend connection is added step by step. So far: GET /health, POST /classify,
+// POST /review and GET /cases (saved tickets are loaded when the page opens).
 
 // Backend API address. Change it here if the backend runs somewhere else.
 const API_BASE_URL = "http://127.0.0.1:8001";
@@ -103,7 +103,11 @@ async function submitTicket(message) {
     method: "POST",
     body: JSON.stringify({ text: message }),
   });
+  return toTicket(result);
+}
 
+// Turns a ticket from the backend into the shape the dashboard uses.
+function toTicket(result) {
   return {
     id: result.ticket_id,
     message: result.text,
@@ -112,6 +116,15 @@ async function submitTicket(message) {
     status: result.status,
     customerReply: result.customer_reply, // needed again when the ticket is corrected
   };
+}
+
+// GET /cases: loads all saved tickets (newest first) and sorts them into the
+// two dashboard lists by status.
+async function loadTickets() {
+  const cases = await apiRequest("/cases");
+  const tickets = cases.map(toTicket);
+  state.review = tickets.filter((ticket) => ticket.status === STATUS_HUMAN_REVIEW);
+  state.classified = tickets.filter((ticket) => ticket.status !== STATUS_HUMAN_REVIEW);
 }
 
 // POST /review: a human confirms ("approve") or changes ("correct") the category.
@@ -339,5 +352,12 @@ EXAMPLE_TICKETS.forEach((example) => {
   exampleButtons.append(button);
 });
 
+// On page open: show the empty dashboard, then fill it with the saved tickets.
 renderDashboard();
 checkBackendHealth();
+loadTickets()
+  .then(renderDashboard)
+  .catch((error) => {
+    // Simple error message in the list if the tickets cannot be loaded.
+    renderList(classifiedList, [], error.message);
+  });
