@@ -176,6 +176,44 @@ class TicketApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["category"], created["category"])
 
+    def test_cases_list_is_persisted_and_newest_first(self):
+        first = self.classify("My package is missing.")
+        second = self.classify("I forgot my password.")
+        response = self.client.get("/cases")
+        self.assertEqual(response.status_code, 200)
+        cases = response.get_json()
+        self.assertEqual([row["ticket_id"] for row in cases],
+                         [second["ticket_id"], first["ticket_id"]])
+        self.assertTrue(all({"ticket_id", "text", "category", "confidence",
+                             "status", "review_required", "reply_confirmed"}
+                            <= row.keys() for row in cases))
+        restarted = create_app(review_path=self.review_csv)
+        persisted = restarted.test_client().get("/cases").get_json()
+        self.assertEqual([row["ticket_id"] for row in persisted],
+                         [second["ticket_id"], first["ticket_id"]])
+
+    def test_cases_list_reflects_review_correction(self):
+        created = self.classify("Something is odd, I need help.")
+        self.assertEqual(created["status"], "human_review")
+        response = self.client.post("/review", json={
+            "ticket_id": created["ticket_id"],
+            "decision": "correct",
+            "reviewer": "Kenan",
+            "final_category": "Account",
+            "customer_reply": "We will check your account.",
+        })
+        self.assertEqual(response.status_code, 200)
+        listed = self.client.get("/cases").get_json()[0]
+        self.assertEqual(listed["category"], "Account")
+        self.assertEqual(listed["status"], "reviewed")
+        self.assertTrue(listed["reply_confirmed"])
+        restarted = create_app(review_path=self.review_csv)
+        self.assertEqual(restarted.test_client().get("/cases").get_json()[0]["category"],
+                         "Account")
+
+    def test_cases_list_starts_empty(self):
+        self.assertEqual(self.client.get("/cases").get_json(), [])
+
     def test_review_survives_app_restart(self):
         created = self.classify("My package is missing.")
         response = self.client.post("/review", json={

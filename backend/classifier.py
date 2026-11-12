@@ -37,8 +37,13 @@ _RULES = {
         "funktioniert nicht": 3,
     },
     "Orders": {
-        "order": 1, "purchase": 2, "cancel": 3,
+        "order": 1, "purchase": 2, "cancel": 3, "cancelled": 3,
+        "cancel my order": 4, "change my order": 4, "modify my order": 4,
+        "order status": 4, "order confirmation": 4, "wrong item": 3,
+        "placed an order": 4, "ordered": 2,
         "cancellation": 3, "bestellung": 1, "stornierung": 3,
+        "bestellstatus": 4, "bestellung ändern": 4, "bestellung stornieren": 4,
+        "falscher artikel": 3, "bestellt": 2,
     },
 }
 

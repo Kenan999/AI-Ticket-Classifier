@@ -19,9 +19,11 @@ from flask import Flask, jsonify, request
 try:
     from .classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from .review import ReviewError, save_review
+    from .llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 except ImportError:  # Supports direct execution: python3 backend/app.py
     from classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from review import ReviewError, save_review
+    from llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
 
 def create_app(review_path=None, case_db_path=None):
@@ -91,7 +93,26 @@ def create_app(review_path=None, case_db_path=None):
         if len(text) > 4000:
             return error("text_too_long", "text must be at most 4000 characters")
 
+        # Keep the response/SQLite contract stable for the existing frontend.
+        # Gemini is opt-in. Errors fall back to the proven local baseline.
         prediction = predict_ticket(text)
+        provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
+        if provider == "gemini":
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if api_key:
+                try:
+                    prediction = classify_with_gemini(
+                        text,
+                        api_key=api_key,
+                        categories=configured_categories(),
+                        model=os.getenv("GEMINI_MODEL", DEFAULT_MODEL),
+                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
+                    )
+                except (LLMError, ValueError, OverflowError) as exc:
+                    # Only report the failure class: never log ticket text or secrets.
+                    app.logger.warning("Gemini classification unavailable (%s); using baseline", type(exc).__name__)
+            else:
+                app.logger.warning("Gemini selected but GEMINI_API_KEY missing; using baseline")
         review_required = prediction.confidence < REVIEW_THRESHOLD
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
@@ -109,6 +130,16 @@ def create_app(review_path=None, case_db_path=None):
         with lock:
             store_case(case)
         return jsonify(case)
+
+    @app.get("/cases")
+    def cases_list():
+        """Return all persisted cases for the support dashboard, newest first."""
+        with lock:
+            with connect_cases() as connection:
+                rows = connection.execute(
+                    "SELECT payload FROM cases ORDER BY rowid DESC"
+                ).fetchall()
+        return jsonify([json.loads(row[0]) for row in rows])
 
     @app.get("/case/<ticket_id>")
     def case_detail(ticket_id):
@@ -155,8 +186,25 @@ def create_app(review_path=None, case_db_path=None):
     return app
 
 
+def load_local_env():
+    """Load only supported backend settings from the private .env file."""
+    path = Path(__file__).resolve().parent / ".env"
+    if not path.is_file():
+        return
+    allowed = {"LLM_PROVIDER", "GEMINI_API_KEY", "GEMINI_MODEL",
+               "LLM_TIMEOUT_SECONDS", "LLM_CATEGORIES"}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        if name.strip() in allowed:
+            os.environ.setdefault(name.strip(), value.strip().strip('"\''))
+
+
 app = create_app()
 
 if __name__ == "__main__":
+    load_local_env()
     port = int(os.getenv("BACKEND_PORT", "8001"))
     app.run(host="127.0.0.1", port=port, debug=False)
