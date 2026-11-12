@@ -2,7 +2,7 @@
 
 Python backend for an AI-assisted customer-support ticket classifier. It provides a Flask API to receive tickets, classify them with a transparent keyword-based baseline, suggest customer replies, and route uncertain cases for human review. Tickets are stored locally in SQLite, and review decisions are recorded in CSV.
 
-The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The current classifier is rule-based, not a trained AI model.** This is a local development backend and is not yet configured for public deployment.
+The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The default classifier is rule-based; the optional Gemini adapter can be enabled with server-side credentials.** This is a local development backend and is not yet configured for public deployment.
 
 ## Dataset preparation
 
@@ -28,6 +28,6 @@ Install dependencies with `python3 -m pip install -r requirements.txt` and start
 Run isolated tests with `python3 -m unittest discover -s tests -v`.
 Cases are stored in `results/cases.sqlite` and review feedback in
 `results/reviews.csv` by default; these runtime files must not be committed.
-The current classifier is a rule-based baseline, not a trained model. The
+By default classification uses the keyword baseline. See [optional LLM integration](docs/llm_integration.md) for Gemini configuration. The
 `Backend` branch is for development; push, open a PR, test/review and merge
 into `main` for the existing deployment workflow. This checkout is not live.
