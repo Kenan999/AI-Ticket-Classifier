@@ -25,6 +25,24 @@ class BaselineClassifierTests(unittest.TestCase):
             self.assertLessEqual(prediction.confidence, 1.0)
             self.assertTrue(suggest_customer_reply(prediction.category))
 
+    def test_order_specific_requests(self):
+        for message in (
+            "Please cancel my order.",
+            "I want to change my order.",
+            "What is my order status?",
+            "I placed an order yesterday.",
+            "Ich möchte meine Bestellung stornieren.",
+            "Wie ist mein Bestellstatus?",
+        ):
+            with self.subTest(message=message):
+                result = predict_ticket(message)
+                self.assertEqual(result.category, "Orders")
+                self.assertGreaterEqual(result.confidence, 0.75)
+
+    def test_shipping_still_wins_on_delivery_questions(self):
+        result = predict_ticket("Where is my delivery? My order has not arrived.")
+        self.assertEqual(result.category, "Shipping")
+
     def test_invalid_direct_input(self):
         with self.assertRaises(ValueError):
             predict_ticket(" ")
