@@ -9,7 +9,6 @@ const MIN_MESSAGE_LENGTH = 10;
 
 // Backend status values and how we show them.
 const STATUS_HUMAN_REVIEW = "human_review";
-const STATUS_REVIEWED = "reviewed";
 const STATUS_LABELS = {
   classified: "Classified",
   human_review: "Needs review",
@@ -243,12 +242,8 @@ async function handleReview(ticket, newCategory, controls, errorEl) {
   try {
     await sendReview(ticket, newCategory);
 
-    // Reviewed: the ticket leaves Human Review and moves to Classified.
-    state.review = state.review.filter((item) => item !== ticket);
-    if (newCategory) ticket.category = newCategory;
-    ticket.status = STATUS_REVIEWED;
-    state.classified.unshift(ticket);
-    renderDashboard();
+    // Reviewed: load the tickets again, so the dashboard shows what is saved in the backend.
+    await reloadTickets();
   } catch (error) {
     errorEl.textContent = error.message;
     errorEl.hidden = false;
@@ -257,12 +252,12 @@ async function handleReview(ticket, newCategory, controls, errorEl) {
   }
 }
 
-function renderList(listEl, tickets, emptyText) {
+function renderList(listEl, tickets, emptyText, isError = false) {
   listEl.replaceChildren();
 
   if (tickets.length === 0) {
     const empty = document.createElement("li");
-    empty.className = "ticket-empty";
+    empty.className = isError ? "ticket-empty ticket-empty-error" : "ticket-empty";
     empty.textContent = emptyText;
     listEl.append(empty);
     return;
@@ -316,10 +311,8 @@ form.addEventListener("submit", async (event) => {
   try {
     const ticket = await submitTicket(message);
 
-    // The backend decides where the ticket belongs. Newest first.
-    const list = ticket.status === STATUS_HUMAN_REVIEW ? state.review : state.classified;
-    list.unshift(ticket);
-    renderDashboard();
+    // Load the tickets again: the backend decides where the new ticket belongs.
+    await reloadTickets();
 
     form.reset();
     successDetail.textContent = `Ticket ${ticket.id}`;
@@ -365,8 +358,12 @@ async function reloadTickets() {
     await loadTickets();
     renderDashboard();
   } catch (error) {
-    // Simple error message in the list if the tickets cannot be loaded.
-    renderList(classifiedList, [], error.message);
+    // Simple red error message in both lists if the tickets cannot be loaded.
+    state.classified = [];
+    state.review = [];
+    renderDashboard();
+    renderList(classifiedList, [], error.message, true);
+    renderList(reviewList, [], error.message, true);
   } finally {
     reloadButton.disabled = false;
   }

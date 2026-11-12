@@ -466,6 +466,11 @@ button:hover {
   font-size: 0.85rem;
 }
 
+/* Error message in a list, e.g. when the backend is not reachable */
+.ticket-empty-error {
+  color: #fca5a5;
+}
+
 /* Info chips (category, confidence). Dashed = no value yet. */
 .chip {
   display: inline-flex;
