@@ -38,6 +38,13 @@
             aria-describedby="form-error"
           ></textarea>
           <p id="form-error" class="form-error" role="alert" hidden></p>
+
+          <!-- Development helper: fills the text field with an example ticket -->
+          <div class="dev-examples">
+            <p class="dev-label">Dev: example tickets</p>
+            <div id="example-buttons" class="example-buttons"></div>
+          </div>
+
           <button type="submit">Send message</button>
           <div id="form-success" class="form-success" role="status" hidden>
             <strong>Thank you for your request.</strong>
@@ -54,16 +61,19 @@
       <section class="screen screen-staff" aria-labelledby="dashboard-title">
         <div class="staff-head">
           <h2 id="dashboard-title">Customer Support Dashboard</h2>
-          <span class="staff-pill">Staff only</span>
+          <div class="staff-pills">
+            <button type="button" id="reload-button" class="reload-btn">Reload</button>
+            <span id="backend-status" class="staff-pill" data-state="checking">Backend: checking…</span>
+          </div>
         </div>
 
-        <div class="dash-section">
-          <h3>Classified Tickets</h3>
+        <div class="dash-section dash-classified">
+          <h3>Classified Tickets <span id="classified-count" class="count">0</span></h3>
           <ul id="classified-list" class="ticket-list"></ul>
         </div>
 
-        <div class="dash-section">
-          <h3>Human Review</h3>
+        <div class="dash-section dash-review">
+          <h3>Human Review <span id="review-count" class="count">0</span></h3>
           <ul id="review-list" class="ticket-list"></ul>
         </div>
       </section>
