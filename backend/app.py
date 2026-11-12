@@ -110,6 +110,16 @@ def create_app(review_path=None, case_db_path=None):
             store_case(case)
         return jsonify(case)
 
+    @app.get("/cases")
+    def cases_list():
+        """Return all persisted cases for the support dashboard, newest first."""
+        with lock:
+            with connect_cases() as connection:
+                rows = connection.execute(
+                    "SELECT payload FROM cases ORDER BY rowid DESC"
+                ).fetchall()
+        return jsonify([json.loads(row[0]) for row in rows])
+
     @app.get("/case/<ticket_id>")
     def case_detail(ticket_id):
         with lock:
