@@ -47,6 +47,7 @@ const successDetail = document.getElementById("success-detail");
 const classifiedList = document.getElementById("classified-list");
 const reviewList = document.getElementById("review-list");
 const backendStatus = document.getElementById("backend-status");
+const reloadButton = document.getElementById("reload-button");
 const submitButton = form.querySelector("button[type=submit]");
 const submitLabel = submitButton.textContent;
 
@@ -355,9 +356,23 @@ EXAMPLE_TICKETS.forEach((example) => {
 // On page open: show the empty dashboard, then fill it with the saved tickets.
 renderDashboard();
 checkBackendHealth();
-loadTickets()
-  .then(renderDashboard)
-  .catch((error) => {
+reloadTickets();
+
+// Loads the saved tickets and shows them. Used on page open and by the Reload button.
+async function reloadTickets() {
+  reloadButton.disabled = true;
+  try {
+    await loadTickets();
+    renderDashboard();
+  } catch (error) {
     // Simple error message in the list if the tickets cannot be loaded.
     renderList(classifiedList, [], error.message);
-  });
+  } finally {
+    reloadButton.disabled = false;
+  }
+}
+
+reloadButton.addEventListener("click", () => {
+  checkBackendHealth();
+  reloadTickets();
+});

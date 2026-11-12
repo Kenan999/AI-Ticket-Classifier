@@ -296,7 +296,28 @@ button:hover {
   color: #fdba74;
 }
 
+/* Reload button in the dashboard header, same size as the status pill */
+.reload-btn {
+  margin: 0;
+  padding: 3px 12px;
+  border: 1px solid var(--dark-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--bg);
+  font-size: 0.75rem;
+}
+
+.reload-btn:hover {
+  background: var(--dark-soft);
+}
+
+.reload-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .staff-pills {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
