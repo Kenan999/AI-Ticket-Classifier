@@ -1,12 +1,34 @@
-"""Evaluation V0 – Schritt 2: Testtickets durch den Klassifikator schicken.
+"""Evaluation V0 des Ticket-Klassifikators.
 
-Noch keine Metriken und kein CSV-Export. Nur: Ticket rein, Kategorie raus.
+Schickt die festen Testtickets durch predict_ticket(), vergleicht das
+Ergebnis mit der Ground Truth und berechnet Accuracy, Precision, Recall
+und Macro-F1. Fehlklassifikationen werden aufgelistet, alle Ergebnisse
+landen zusaetzlich in results/evaluation/evaluation_v0.csv.
+
+Das Backend wird nur gelesen, nie veraendert.
 
 Starten aus dem Projekt-Root:
     python3 -m evaluation.evaluate
 """
 
+import csv
+from pathlib import Path
+
 from backend.classifier import predict_ticket
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+RESULTS_PATH = (
+    PROJECT_ROOT / "results" / "evaluation" / "evaluation_v0.csv"
+)
+FIELDNAMES = [
+    "ticket_nr",
+    "text",
+    "expected",
+    "predicted",
+    "confidence",
+    "model_version",
+    "correct",
+]
 
 # Die 5 freigegebenen Testtickets.
 # "expected" ist die Ground Truth, also unsere menschliche Einordnung.
@@ -130,6 +152,30 @@ def misclassifications(results):
     ]
 
 
+def save_results(results, path=RESULTS_PATH):
+    """Schreibt eine Zeile pro Ticket als CSV und gibt den Pfad zurueck.
+
+    Der Zielordner wird angelegt, falls er noch nicht existiert.
+    Eine vorhandene Datei wird ueberschrieben, damit immer der
+    aktuelle Stand drin steht.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=FIELDNAMES)
+        writer.writeheader()
+        for number, result in enumerate(results, start=1):
+            writer.writerow({
+                "ticket_nr": number,
+                "text": result["text"],
+                "expected": result["expected"],
+                "predicted": result["predicted"],
+                "confidence": result["confidence"],
+                "model_version": result["model_version"],
+                "correct": result["correct"],
+            })
+    return path
+
+
 def print_metrics(results):
     """Kennzahlen-Block und Fehlklassifikationen ausgeben."""
     correct = sum(1 for result in results if result["correct"])
@@ -178,6 +224,10 @@ def main():
         print()
 
     print_metrics(results)
+
+    path = save_results(results)
+    print()
+    print(f"Gespeichert: {path.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":
