@@ -56,8 +56,118 @@ def run_evaluation(tickets=TEST_TICKETS):
     return results
 
 
+def accuracy(results):
+    """Anteil richtiger Vorhersagen, Wert zwischen 0.0 und 1.0."""
+    if not results:
+        return 0.0
+    correct = sum(1 for result in results if result["correct"])
+    return correct / len(results)
+
+
+def per_category_scores(results):
+    """Precision, Recall und F1 je Kategorie als Dictionary.
+
+    TP: richtig erkannt. FP: falsch in diese Kategorie gesteckt.
+    FN: gehoert hierher, wurde aber anders einsortiert.
+    """
+    categories = {result["expected"] for result in results}
+    categories |= {result["predicted"] for result in results}
+
+    scores = {}
+    for category in sorted(categories):
+        true_positive = sum(
+            1 for result in results
+            if result["expected"] == category
+            and result["predicted"] == category
+        )
+        false_positive = sum(
+            1 for result in results
+            if result["predicted"] == category
+            and result["expected"] != category
+        )
+        false_negative = sum(
+            1 for result in results
+            if result["expected"] == category
+            and result["predicted"] != category
+        )
+
+        predicted_total = true_positive + false_positive
+        expected_total = true_positive + false_negative
+        precision = true_positive / predicted_total if predicted_total else 0.0
+        recall = true_positive / expected_total if expected_total else 0.0
+        if precision + recall:
+            f1 = 2 * precision * recall / (precision + recall)
+        else:
+            f1 = 0.0
+
+        scores[category] = {
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "support": expected_total,
+        }
+    return scores
+
+
+def macro_f1(results):
+    """Mittelwert der F1-Werte aller Kategorien, ungewichtet."""
+    scores = per_category_scores(results)
+    if not scores:
+        return 0.0
+    return sum(score["f1"] for score in scores.values()) / len(scores)
+
+
+def misclassifications(results):
+    """Nur die falsch einsortierten Tickets."""
+    return [
+        {
+            "text": result["text"],
+            "expected": result["expected"],
+            "predicted": result["predicted"],
+            "confidence": result["confidence"],
+        }
+        for result in results if not result["correct"]
+    ]
+
+
+def print_metrics(results):
+    """Kennzahlen-Block und Fehlklassifikationen ausgeben."""
+    correct = sum(1 for result in results if result["correct"])
+    share = accuracy(results)
+
+    print("=" * 60)
+    print(f"Tickets:   {len(results)}")
+    print(f"Richtig:   {correct}")
+    print(f"Accuracy:  {share:.2f} ({share * 100:.0f} %)")
+    print(f"Macro-F1:  {macro_f1(results):.2f}")
+    print()
+
+    print("Pro Kategorie:")
+    for category, score in per_category_scores(results).items():
+        print(
+            f"   {category:<12} "
+            f"Precision {score['precision']:.2f}  "
+            f"Recall {score['recall']:.2f}  "
+            f"F1 {score['f1']:.2f}  "
+            f"(n={score['support']})"
+        )
+    print()
+
+    errors = misclassifications(results)
+    if not errors:
+        print("Fehlklassifikationen: keine")
+        return
+    print(f"Fehlklassifikationen: {len(errors)}")
+    for error in errors:
+        print(f"   Text:       {error['text']}")
+        print(f"   Erwartet:   {error['expected']}")
+        print(f"   Vorhersage: {error['predicted']}")
+        print()
+
+
 def main():
-    for number, result in enumerate(run_evaluation(), start=1):
+    results = run_evaluation()
+    for number, result in enumerate(results, start=1):
         mark = "OK " if result["correct"] else "FALSCH"
         print(f"{mark} Ticket {number}")
         print(f"   Text:       {result['text']}")
@@ -66,6 +176,8 @@ def main():
         print(f"   Confidence: {result['confidence']}")
         print(f"   Modell:     {result['model_version']}")
         print()
+
+    print_metrics(results)
 
 
 if __name__ == "__main__":
