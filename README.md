@@ -25,6 +25,24 @@ Install dependencies with `python3 -m pip install -r requirements.txt` and start
 - `POST /review`: approves or corrects a ticket with an explicit human decision;
   writes review feedback to CSV and the updated ticket to SQLite.
 
+## Evaluation (V0)
+
+`evaluation/evaluate.py` measures the classifier against a small fixed set of
+labelled tickets. It imports `predict_ticket` directly, so no API, database or
+frontend is involved, and it never modifies backend files. Run it from the
+project root with `python3 -m evaluation.evaluate`. It prints accuracy,
+per-category precision/recall/F1, macro-F1 and any misclassifications, and
+writes one row per ticket to `results/evaluation/evaluation_v0.csv`.
+That file is a runtime artefact and must not be committed.
+
+The planned Streamlit dashboard needs `streamlit` (tested with 1.67.0). It is
+**not** part of `requirements.txt` yet — install it separately while the
+dashboard is still experimental:
+`python3 -m pip install streamlit`. If the dashboard becomes permanent, move
+the dependency into a requirements file; if it is dropped, remove this note.
+
+## Tests
+
 Run isolated tests with `python3 -m unittest discover -s tests -v`.
 Cases are stored in `results/cases.sqlite` and review feedback in
 `results/reviews.csv` by default; these runtime files must not be committed.
