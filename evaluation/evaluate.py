@@ -1,25 +1,57 @@
-"""Evaluation V0 des Ticket-Klassifikators.
+"""Evaluation des Ticket-Klassifikators an festen Testtickets.
 
-Schickt die festen Testtickets durch predict_ticket(), vergleicht das
-Ergebnis mit der Ground Truth und berechnet Accuracy, Precision, Recall
-und Macro-F1. Fehlklassifikationen werden aufgelistet, alle Ergebnisse
-landen zusaetzlich in results/evaluation/evaluation_v0.csv.
+Misst wahlweise den Regel-Klassifikator oder Gemini mit dem bestehenden
+Prompt aus backend/llm_classifier.py, vergleicht das Ergebnis mit der
+Ground Truth und berechnet Accuracy, Precision, Recall und Macro-F1.
+Jedes Verfahren schreibt in eine eigene CSV unter results/evaluation/.
 
 Das Backend wird nur gelesen, nie veraendert.
 
 Starten aus dem Projekt-Root:
-    python3 -m evaluation.evaluate
+    python3 -m evaluation.evaluate                      # Regeln
+    python3 -m evaluation.evaluate --provider gemini    # Gemini
 """
 
+import argparse
 import csv
 from pathlib import Path
 
 from backend.classifier import predict_ticket
+from backend.llm_classifier import (
+    DEFAULT_MODEL,
+    LLMError,
+    classify_with_gemini,
+    configured_categories,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-RESULTS_PATH = (
-    PROJECT_ROOT / "results" / "evaluation" / "evaluation_v0.csv"
+RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"
+ENV_PATH = PROJECT_ROOT / "backend" / ".env"
+
+# Verfahren, die gemessen werden koennen. Jedes schreibt in eine eigene
+# Datei, damit ein Lauf nie das Ergebnis des anderen ueberschreibt.
+BASELINE = "baseline"
+GEMINI = "gemini"
+PROVIDERS = {
+    BASELINE: {
+        "label": "Regeln (V0)",
+        "file": "evaluation_v0.csv",
+    },
+    GEMINI: {
+        "label": "Gemini (bestehender Prompt)",
+        "file": "evaluation_gemini.csv",
+    },
+}
+
+# Nur diese Schluessel werden aus backend/.env uebernommen.
+ENV_KEYS = (
+    "GEMINI_API_KEY",
+    "GEMINI_MODEL",
+    "LLM_TIMEOUT_SECONDS",
+    "LLM_CATEGORIES",
 )
+
+RESULTS_PATH = RESULTS_DIR / PROVIDERS[BASELINE]["file"]
 FIELDNAMES = [
     "ticket_nr",
     "text",
@@ -28,6 +60,7 @@ FIELDNAMES = [
     "confidence",
     "model_version",
     "correct",
+    "error",
 ]
 
 # Die 5 freigegebenen Testtickets.
@@ -62,18 +95,84 @@ TEST_TICKETS = [
 ]
 
 
-def run_evaluation(tickets=TEST_TICKETS):
-    """Ruft predict_ticket() je Ticket auf und sammelt die Ergebnisse."""
+def load_env(path=ENV_PATH):
+    """Liest die erlaubten Schluessel aus backend/.env.
+
+    Bewusst ohne Import von backend/app.py: der wuerde beim Import
+    Flask starten und eine SQLite-Datei anlegen.
+    """
+    values = {}
+    if not path.is_file():
+        return values
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, value = line.split("=", 1)
+        name = name.strip()
+        if name in ENV_KEYS:
+            values[name] = value.strip().strip('"\'')
+    return values
+
+
+def results_path(provider=BASELINE):
+    """Ergebnisdatei des jeweiligen Verfahrens."""
+    return RESULTS_DIR / PROVIDERS[provider]["file"]
+
+
+def classify_ticket(text, provider=BASELINE, env=None):
+    """Klassifiziert einen Text mit dem gewaehlten Verfahren.
+
+    Gibt (category, confidence, model_version, error) zurueck.
+    Bei einem Gemini-Fehler steht in error der Grund und die Kategorie
+    ist "FEHLER" - es wird NICHT heimlich auf die Regeln zurueckgefallen,
+    sonst waere das Ergebnis eine Mischung aus beiden Verfahren.
+    """
+    if provider != GEMINI:
+        prediction = predict_ticket(text)
+        return (prediction.category, prediction.confidence,
+                prediction.model_version, "")
+
+    env = env if env is not None else load_env()
+    api_key = env.get("GEMINI_API_KEY", "")
+    if not api_key:
+        raise RuntimeError(
+            "GEMINI_API_KEY fehlt in backend/.env - "
+            "ohne Key kann Gemini nicht gemessen werden."
+        )
+    try:
+        prediction = classify_with_gemini(
+            text,
+            api_key=api_key,
+            categories=configured_categories(
+                env.get("LLM_CATEGORIES", "")
+            ),
+            model=env.get("GEMINI_MODEL", DEFAULT_MODEL),
+            timeout=float(env.get("LLM_TIMEOUT_SECONDS", "8")),
+        )
+    except (LLMError, ValueError, OverflowError) as exc:
+        # Nie den Tickettext oder den Key mit ausgeben.
+        return ("FEHLER", 0.0, "gemini:nicht erreichbar", str(exc))
+    return (prediction.category, prediction.confidence,
+            prediction.model_version, "")
+
+
+def run_evaluation(tickets=TEST_TICKETS, provider=BASELINE):
+    """Misst alle Tickets mit dem gewaehlten Verfahren."""
+    env = load_env() if provider == GEMINI else {}
     results = []
     for ticket in tickets:
-        prediction = predict_ticket(ticket["text"])
+        category, confidence, model_version, error = classify_ticket(
+            ticket["text"], provider=provider, env=env,
+        )
         results.append({
             "text": ticket["text"],
             "expected": ticket["expected"],
-            "predicted": prediction.category,
-            "confidence": prediction.confidence,
-            "model_version": prediction.model_version,
-            "correct": prediction.category == ticket["expected"],
+            "predicted": category,
+            "confidence": confidence,
+            "model_version": model_version,
+            "correct": category == ticket["expected"],
+            "error": error,
         })
     return results
 
@@ -172,6 +271,7 @@ def save_results(results, path=RESULTS_PATH):
                 "confidence": result["confidence"],
                 "model_version": result["model_version"],
                 "correct": result["correct"],
+                "error": result.get("error", ""),
             })
     return path
 
@@ -211,8 +311,26 @@ def print_metrics(results):
         print()
 
 
-def main():
-    results = run_evaluation()
+def parse_args(argv=None):
+    """Liest das gewuenschte Verfahren von der Kommandozeile."""
+    parser = argparse.ArgumentParser(
+        description="Misst den Ticket-Klassifikator an festen Tickets.",
+    )
+    parser.add_argument(
+        "--provider",
+        choices=sorted(PROVIDERS),
+        default=BASELINE,
+        help="baseline = Regeln (Standard), gemini = Gemini",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    provider = parse_args(argv).provider
+    print(f"Verfahren: {PROVIDERS[provider]['label']}")
+    print()
+
+    results = run_evaluation(provider=provider)
     for number, result in enumerate(results, start=1):
         mark = "OK " if result["correct"] else "FALSCH"
         print(f"{mark} Ticket {number}")
@@ -221,11 +339,13 @@ def main():
         print(f"   Vorhersage: {result['predicted']}")
         print(f"   Confidence: {result['confidence']}")
         print(f"   Modell:     {result['model_version']}")
+        if result["error"]:
+            print(f"   Fehler:     {result['error']}")
         print()
 
     print_metrics(results)
 
-    path = save_results(results)
+    path = save_results(results, results_path(provider))
     print()
     print(f"Gespeichert: {path.relative_to(PROJECT_ROOT)}")
 

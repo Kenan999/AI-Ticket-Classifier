@@ -24,11 +24,14 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from evaluation.evaluate import (  # noqa: E402
-    RESULTS_PATH,
+    BASELINE,
+    GEMINI,
+    PROVIDERS,
     accuracy,
     macro_f1,
     misclassifications,
     per_category_scores,
+    results_path,
     run_evaluation,
     save_results,
 )
@@ -54,18 +57,30 @@ TARGET_MACRO_F1 = 0.85
 # Prompt-Versionen. V0 ist die Keyword-Baseline, V1-V3 sind spaetere
 # Prompt-Varianten. "path" bleibt None, solange nichts gemessen wurde -
 # dann steht in Tabelle und Diagramm nichts, niemals erfundene Zahlen.
-CURRENT_VERSION = "V0"
 VERSIONS = [
     {
         "key": "V0",
-        "short": "V0 · Baseline",
-        "path": RESULTS_PATH,
+        "short": "V0 · Regeln",
+        "path": results_path(BASELINE),
         "tint": "#eaf2fc",
         "ink": "#1b5fae",
         "approach": "Regeln, kein LLM",
         "prompt": (
             "Kein Prompt. Gezählte Stichwörter mit festen Punktwerten "
             "in backend/classifier.py."
+        ),
+    },
+    {
+        "key": "GEMINI",
+        "short": "Gemini · bestehend",
+        "path": results_path(GEMINI),
+        "tint": "#fdf6e6",
+        "ink": "#8a6100",
+        "approach": "Gemini, Prompt aus dem Backend",
+        "prompt": (
+            "Bestehender System-Prompt aus "
+            "backend/llm_classifier.py – unverändert übernommen, "
+            "nicht von der Evaluation geschrieben."
         ),
     },
     {
@@ -174,7 +189,7 @@ weil es kein "x von 100 richtig" bedeutet.
 """
 
 
-def last_run(path=RESULTS_PATH):
+def last_run(path):
     """Zeitpunkt des letzten Laufs, aus dem Dateidatum der CSV."""
     if not path.is_file():
         return None
@@ -182,7 +197,7 @@ def last_run(path=RESULTS_PATH):
     return stamp.strftime("%d.%m.%Y um %H:%M Uhr")
 
 
-def load_results(path=RESULTS_PATH):
+def load_results(path):
     """Liest die CSV und baut die Ergebnisliste wieder auf.
 
     "correct" wird neu aus expected und predicted bestimmt, damit das
@@ -202,33 +217,47 @@ def load_results(path=RESULTS_PATH):
     return results
 
 
-def render_sidebar(results):
-    """Steuerung und Angaben zur Datenquelle in der Seitenleiste."""
+def render_sidebar():
+    """Steuerung in der Seitenleiste, gibt das gewaehlte Verfahren zurueck."""
     with st.sidebar:
         st.header("Steuerung")
+        provider = st.selectbox(
+            "Verfahren",
+            options=list(PROVIDERS),
+            format_func=lambda key: PROVIDERS[key]["label"],
+            help=(
+                "Regeln laufen offline. Gemini schickt die Testtickets "
+                "an Google und braucht einen Key in backend/.env."
+            ),
+        )
         if st.button("Evaluation neu ausführen", width="stretch"):
-            save_results(run_evaluation())
-            st.success("Neu berechnet und gespeichert.")
-            st.rerun()
+            try:
+                with st.spinner("Messung läuft …"):
+                    measured = run_evaluation(provider=provider)
+                    save_results(measured, results_path(provider))
+            except RuntimeError as exc:
+                st.error(str(exc))
+            else:
+                st.success("Neu berechnet und gespeichert.")
+                st.rerun()
 
-        if results:
-            st.divider()
-            st.caption("Ergebnisdatei")
-            st.code(RESULTS_PATH.name, language=None)
-            versions = sorted({row["model_version"] for row in results})
-            st.caption("Gemessenes Modell")
-            for version in versions:
-                st.code(version, language=None)
+        st.divider()
+        st.caption("Ergebnisdatei")
+        st.code(results_path(provider).name, language=None)
+        return provider
 
 
-def render_header(results):
-    """Titel, Versionskennzeichen und Hinweis auf die Testdaten."""
-    title, badge = st.columns([5, 1], vertical_alignment="center")
+def render_header(results, provider, path):
+    """Titel, gewaehltes Verfahren und Hinweis auf die Testdaten."""
+    title, badge = st.columns([4, 2], vertical_alignment="center")
     title.title("Ticket-Klassifikator – Evaluation")
-    badge.success("Version V0")
-    stamp = last_run()
+    badge.success(PROVIDERS[provider]["label"])
+    stamp = last_run(path)
+    models = sorted({row["model_version"] for row in results})
     if stamp:
-        st.caption(f"Letzte Messung: {stamp}")
+        st.caption(
+            f"Letzte Messung: {stamp} · Modell: {', '.join(models)}"
+        )
     st.warning(
         f"**V0 nutzt {len(results)} synthetische Test-Tickets** – "
         "selbst geschriebene, eindeutige Beispiele. Die Werte zeigen, "
@@ -533,20 +562,11 @@ def render_prompts(measured):
                 st.markdown("_Prompt noch nicht festgelegt._")
 
 
-def render_version_comparison(results):
+def render_version_comparison():
     """Vergleichstabelle und Entwicklungsdiagramm der Versionen."""
     measured = {}
     for version in VERSIONS:
-        data = (
-            {
-                "results": results,
-                "scores": per_category_scores(results),
-                "accuracy": accuracy(results),
-                "macro_f1": macro_f1(results),
-            }
-            if version["key"] == CURRENT_VERSION
-            else version_metrics(version)
-        )
+        data = version_metrics(version)
         if data is not None:
             measured[version["key"]] = data
 
@@ -584,27 +604,28 @@ def main():
         layout="wide",
     )
 
-    if not RESULTS_PATH.is_file():
+    provider = render_sidebar()
+    path = results_path(provider)
+
+    if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
-            "Noch keine Ergebnisse vorhanden. Bitte links auf "
-            "\"Evaluation neu ausführen\" klicken."
+            f"Für \"{PROVIDERS[provider]['label']}\" gibt es noch keine "
+            "Ergebnisse. Bitte links auf \"Evaluation neu ausführen\" "
+            "klicken."
         )
-        render_sidebar([])
         return
 
-    results = load_results()
+    results = load_results(path)
     if not results:
         st.warning("Die Ergebnisdatei ist leer.")
-        render_sidebar([])
         return
 
-    render_sidebar(results)
-    render_header(results)
+    render_header(results, provider, path)
     render_kpis(results)
     st.divider()
 
-    render_version_comparison(results)
+    render_version_comparison()
     st.divider()
 
     st.subheader("Alle Tickets")
