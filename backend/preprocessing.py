@@ -8,13 +8,17 @@ Steps (each one is a function below):
 
 1. ``load_dataset``     read the raw CSV (ticket_id, text, label)   [data_loader.py]
 2. ``check_data``       look at the data, nothing is changed
-3. ``remove_duplicates`` drop repeated tickets (compared by a simplified text key)
-4. ``split_data``       balanced validation and test sets, the rest is train
-5. ``check_split``      prove that the three parts are clean and separate
-6. ``save_splits``      write data/processed/train.csv, validation.csv, test.csv
+3. ``drop_labels``      leave out CANCEL and SUBSCRIPTION (9 labels remain)
+4. ``remove_templates`` cut the ``{{placeholders}}`` out of the texts
+5. ``remove_duplicates`` drop repeated tickets (compared by a simplified text key)
+6. ``split_data``       balanced validation and test sets, the rest is train
+7. ``check_split``      prove that the three parts are clean and separate
+8. ``save_splits``      write data/processed/train.csv, validation.csv, test.csv
 
-The raw file in ``data/raw/`` is never modified. The ticket texts themselves are
-never changed either: the simplified key is only used to compare tickets.
+The raw file in ``data/raw/`` is never modified. The only change to a ticket text
+is that its ``{{placeholders}}`` are cut out (step 4): a placeholder hints at the
+label (most ORDER tickets contain one) and real customers never write one.
+The simplified key of step 5 is only used to compare tickets.
 
 Why a balanced split: the category sizes of Bitext are an artefact of how the
 dataset is built (a category has 1 to 6 intents with about 1,000 tickets each),
@@ -33,8 +37,14 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
 SEED = 42
-# Tickets per label in validation and in test. The smallest label (CANCEL) has
-# 929 tickets after cleaning, so 200 + 200 still leaves 529 of them for train.
+# Labels that are left out completely (team decision): SUBSCRIPTION is only about
+# a newsletter and CANCEL only about cancellation fees, neither is a ticket
+# category of the shop.
+DROP_LABELS = ("CANCEL", "SUBSCRIPTION")
+# Placeholders of the Bitext texts, for example {{Order Number}}.
+TEMPLATE_PATTERN = r"\s*\{\{[^}]*\}\}"  # with the space before it
+# Tickets per label in validation and in test. Every kept label has more than
+# 2 * 200 tickets after cleaning, so train always keeps the rest.
 EVAL_PER_LABEL = 200
 
 
@@ -78,9 +88,31 @@ def remove_duplicates(data):
     """Keep the first ticket of every simplified text, drop the repeats.
 
     The original wording of the kept tickets stays unchanged.
+
+    Raises:
+        ValueError: If one text occurs with different labels. Keeping only the
+            first would silently decide the label, so we stop instead.
     """
     key = make_key(data["text"])
+    if (data.assign(key=key).groupby("key")["label"].nunique() > 1).any():
+        raise ValueError("The same text has different labels, check the data.")
     return data[~key.duplicated()]
+
+
+def drop_labels(data, labels=DROP_LABELS):
+    """Remove all tickets of the given labels. Other tickets stay unchanged."""
+    return data[~data["label"].isin(labels)]
+
+
+def remove_templates(data):
+    """Cut the ``{{placeholders}}`` out of the texts.
+
+    "wanna see order {{Order Number}} status" becomes "wanna see order status".
+    Texts without a placeholder are not changed.
+    """
+    return data.assign(
+        text=data["text"].str.replace(TEMPLATE_PATTERN, "", regex=True).str.strip()
+    )
 
 
 def split_data(data, per_label=EVAL_PER_LABEL, seed=SEED):
@@ -113,7 +145,13 @@ def split_data(data, per_label=EVAL_PER_LABEL, seed=SEED):
 
 
 def clean_and_split(data, per_label=EVAL_PER_LABEL, seed=SEED):
-    """Clean the data and return the (train, validation, test) tables."""
+    """Clean the data and return the (train, validation, test) tables.
+
+    Repeats are removed last, because cutting out the placeholders makes
+    different tickets identical (for example "a {{Account Type}} account" and
+    "a {{Account Category}} account").
+    """
+    data = remove_templates(drop_labels(data))
     return split_data(remove_duplicates(data), per_label, seed)
 
 
@@ -137,6 +175,10 @@ def check_split(train, validation, test, per_label=EVAL_PER_LABEL):
         (part["label"].value_counts() == per_label).all()
         for part in (validation, test)
     )
+    results["texts_with_placeholder"] = sum(
+        int(part["text"].str.contains(TEMPLATE_PATTERN, regex=True).sum())
+        for part in parts.values()
+    )
 
     print("Split check")
     for name, value in results.items():
@@ -147,6 +189,7 @@ def check_split(train, validation, test, per_label=EVAL_PER_LABEL):
         leaks
         or not results["ticket_ids_unique"]
         or not results["validation_and_test_balanced"]
+        or results["texts_with_placeholder"] != 0
     ):
         raise ValueError("The split is not clean, see the numbers above.")
     return results

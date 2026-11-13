@@ -12,7 +12,8 @@ Raw column  -> Project column
 -----------------------------
 (row number) -> ticket_id   e.g. "BT-00001" (the raw file has no ID of its own)
 instruction  -> text        the customer message
-category     -> label       one of 11 ticket categories
+category     -> label       one of the ticket categories (11 in the raw file,
+                            9 in the split files: CANCEL and SUBSCRIPTION are dropped)
 
 All other raw columns (``intent``, ``response``, ``flags``) are not needed for
 classification and are not returned.
