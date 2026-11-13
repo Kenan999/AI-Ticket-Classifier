@@ -9,3 +9,10 @@ data/
 *.py[cod]
 .pytest_cache/
 results/
+
+# Editor-Einstellungen (persoenlich, nicht ins Team-Repo)
+.idea/
+.vscode/
+
+# Private Projektregeln fuer Claude Code
+/CLAUDE.md
