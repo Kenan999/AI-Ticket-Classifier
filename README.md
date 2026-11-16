@@ -47,30 +47,49 @@ Install dependencies with `python -m pip install -r requirements.txt` and start
 
 ## Evaluation
 
-`evaluation/` measures the classifier against a small fixed set of labelled
-tickets. It imports the backend directly — no API, database or frontend — and
-never modifies backend files.
+`evaluation/` measures the classifier against the prepared Bitext splits. It
+imports the backend directly — no API, database or frontend — and never
+modifies backend files or the dataset. Run `python backend/prepare_data.py`
+first; the evaluation reads `data/processed/` and nothing else.
+
+The **dataset labels are the ground truth**. The classifier answers in the
+app's own categories, so its answer is translated to a dataset label before
+comparison. Categories with no dataset label — currently Returns, Technical
+and General — can never match and are counted as wrong.
+
+Three modes, each drawing a fixed sample with `random_state=42`, so every run
+and every machine measures exactly the same tickets:
+
+| Mode | Source | Sample | Purpose |
+|---|---|---|---|
+| `smoke` | `validation.csv` | 5 per label | does the measurement run? |
+| `validation` | `validation.csv` | 20 per label | compare prompts |
+| `final` | `test.csv` | all (200 per label) | independent acceptance |
 
 ```bash
-python -m evaluation.evaluate                     # rule baseline, offline
+python -m evaluation.evaluate                     # smoke, rule baseline
+python -m evaluation.evaluate --mode validation
+python -m evaluation.evaluate --mode final
 python -m evaluation.evaluate --provider gemini
 python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
 ```
 
 The Gemini run reuses `classify_with_gemini` with its existing system prompt
 and needs `GEMINI_API_KEY` in `backend/.env` (copy `backend/.env.example`).
-Each provider writes its own file, `results/evaluation/evaluation_v0.csv` or
-`evaluation_gemini.csv`. Those are runtime artefacts, are git-ignored and must
-not be committed, so run the evaluation once yourself before opening the
-dashboard. A Gemini call that fails is recorded as an error and counted as
-wrong; it does **not** fall back to the rule baseline, because a mixed result
-would not be measurable.
+Note that `--mode final --provider gemini` sends 1,800 requests.
 
-The current test set is five simple synthetic test tickets, so **both**
-providers currently score 1.00. Each provider is evaluated separately and has
-its own result file. The numbers show that the measurement works, not that a
-classifier is good. See [evaluation details](docs/evaluation.md) for the
-method, the metrics and the open points.
+Each combination of mode and provider writes its own file, for example
+`results/evaluation/01_smoke_v0.csv`. Those are runtime artefacts, are
+git-ignored and must not be committed, so run the evaluation once yourself
+before opening the dashboard. A Gemini call that fails is recorded as an error
+and counted as wrong; it does **not** fall back to the rule baseline, because a
+mixed result would not be measurable.
+
+Current scores for the rule baseline are around **0.31 accuracy** and
+**0.30 macro-F1** across all three modes. Five of the nine dataset labels have
+no counterpart in the classifier, which accounts for most of the gap. See
+[evaluation details](docs/evaluation.md) for the method, the metrics and the
+open points.
 
 ## Tests
 

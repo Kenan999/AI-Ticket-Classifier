@@ -1,12 +1,16 @@
-"""Streamlit-Dashboard fuer die Evaluation V0.
+"""Streamlit-Dashboard fuer die Evaluation.
 
-Liest results/evaluation/evaluation_v0.csv und zeigt Accuracy, Macro-F1
-und die Fehlklassifikationen. Die Kennzahlen werden mit den Funktionen
-aus evaluation/evaluate.py berechnet, damit Dashboard und Konsole immer
-dieselben Werte zeigen.
+Zeigt Accuracy, Macro-F1, die Werte je Label und die
+Fehlklassifikationen - fuer den links gewaehlten Modus (Rauchtest,
+Prompt-Validierung, Endabnahme) und das gewaehlte Verfahren. Gelesen
+wird die passende Datei aus results/evaluation/, zum Beispiel
+01_smoke_v0.csv.
+
+Die Kennzahlen werden mit den Funktionen aus evaluation/evaluate.py
+berechnet, damit Dashboard und Konsole immer dieselben Werte zeigen.
 
 Starten aus dem Projekt-Root:
-    streamlit run evaluation/dashboard.py
+    python -m streamlit run evaluation/dashboard.py
 """
 
 import sys
@@ -26,10 +30,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from evaluation.evaluate import (  # noqa: E402
     BASELINE,
     GEMINI,
+    MODES,
     PROVIDERS,
+    SAMPLE_SEED,
     accuracy,
+    load_mode_tickets,
     macro_f1,
     misclassifications,
+    mode_number,
     per_category_scores,
     results_path,
     run_evaluation,
@@ -61,7 +69,7 @@ VERSIONS = [
     {
         "key": "V0",
         "short": "V0 · Regeln",
-        "path": results_path(BASELINE),
+        "provider": BASELINE,
         "tint": "#eaf2fc",
         "ink": "#1b5fae",
         "approach": "Regeln, kein LLM",
@@ -73,7 +81,7 @@ VERSIONS = [
     {
         "key": "GEMINI",
         "short": "Gemini · bestehend",
-        "path": results_path(GEMINI),
+        "provider": GEMINI,
         "tint": "#fdf6e6",
         "ink": "#8a6100",
         "approach": "Gemini, Prompt aus dem Backend",
@@ -86,7 +94,7 @@ VERSIONS = [
     {
         "key": "V1",
         "short": "Prompt V1",
-        "path": None,
+        "provider": None,
         "tint": "#fdf0ea",
         "ink": "#a8451c",
         "approach": "Gemini",
@@ -95,7 +103,7 @@ VERSIONS = [
     {
         "key": "V2",
         "short": "Prompt V2",
-        "path": None,
+        "provider": None,
         "tint": "#e9f7f1",
         "ink": "#107954",
         "approach": "Gemini",
@@ -104,7 +112,7 @@ VERSIONS = [
     {
         "key": "V3",
         "short": "Prompt V3",
-        "path": None,
+        "provider": None,
         "tint": "#efedfb",
         "ink": "#4a3bb0",
         "approach": "Gemini",
@@ -217,8 +225,42 @@ def load_results(path):
     return results
 
 
+@st.cache_data(show_spinner=False)
+def rows_per_label(mode):
+    """Wie viele Tickets ein Modus je Kategorie misst.
+
+    Bei "alle" steht die Zahl nicht in MODES, sie wird aus der Datei
+    gezaehlt. So stimmt sie auch, wenn sich der Datensatz aendert.
+    """
+    per_label = MODES[mode]["per_label"]
+    if per_label is not None:
+        return per_label
+    _, info = load_mode_tickets(mode)
+    labels = len(info["labels"]) or 1
+    return info["tickets"] // labels
+
+
+def mode_label(mode):
+    """Erste Zeile eines Modus: Nummer, Name und Umfang."""
+    settings = MODES[mode]
+    amount = rows_per_label(mode)
+    return (
+        f"{mode_number(mode)}. {settings['label']} "
+        f"({amount} pro Kategorie)"
+    )
+
+
+def mode_caption(mode):
+    """Zweite Zeile: Quelldatei, klein, grau und kursiv."""
+    return f"*{MODES[mode]['file']}*"
+
+
 def render_sidebar():
-    """Steuerung in der Seitenleiste, gibt das gewaehlte Verfahren zurueck."""
+    """Steuerung in der Seitenleiste.
+
+    Gibt (provider, mode) zurueck: womit gemessen wird und aus welcher
+    Datenquelle die Tickets kommen.
+    """
     with st.sidebar:
         st.header("Steuerung")
         provider = st.selectbox(
@@ -226,16 +268,36 @@ def render_sidebar():
             options=list(PROVIDERS),
             format_func=lambda key: PROVIDERS[key]["label"],
             help=(
-                "Regeln laufen offline. Gemini schickt die Testtickets "
-                "an Google und braucht einen Key in backend/.env."
+                "Regeln laufen offline. Gemini schickt die Tickets an "
+                "Google und braucht einen Key in backend/.env."
             ),
         )
+        # st.radio statt selectbox: nur das Radio kann eine zweite,
+        # graue Zeile je Eintrag anzeigen (captions).
+        mode = st.radio(
+            "Datenquelle",
+            options=list(MODES),
+            format_func=mode_label,
+            captions=[mode_caption(key) for key in MODES],
+            help=(
+                "Alle drei ziehen aus dem echten Datensatz, mit festem "
+                f"Seed {SAMPLE_SEED} - jeder Lauf dieselbe Stichprobe. "
+                "1 prueft nur, ob die Messung laeuft. 2 vergleicht "
+                "Prompts. 3 misst auf unabhaengigen Testdaten."
+            ),
+        )
+
         if st.button("Evaluation neu ausführen", width="stretch"):
             try:
                 with st.spinner("Messung läuft …"):
-                    measured = run_evaluation(provider=provider)
-                    save_results(measured, results_path(provider))
-            except RuntimeError as exc:
+                    tickets, _ = load_mode_tickets(mode)
+                    measured = run_evaluation(
+                        tickets=tickets, provider=provider,
+                    )
+                    save_results(
+                        measured, results_path(provider, mode),
+                    )
+            except (RuntimeError, FileNotFoundError, ValueError) as exc:
                 st.error(str(exc))
             else:
                 st.success("Neu berechnet und gespeichert.")
@@ -243,12 +305,12 @@ def render_sidebar():
 
         st.divider()
         st.caption("Ergebnisdatei")
-        st.code(results_path(provider).name, language=None)
-        return provider
+        st.code(results_path(provider, mode).name, language=None)
+        return provider, mode
 
 
-def render_header(results, provider, path):
-    """Titel, gewaehltes Verfahren und Hinweis auf die Testdaten."""
+def render_header(results, provider, path, mode=None):
+    """Titel, gewaehltes Verfahren und Hinweis zur Datenquelle."""
     title, badge = st.columns([4, 2], vertical_alignment="center")
     title.title("Ticket-Klassifikator – Evaluation")
     badge.success(PROVIDERS[provider]["label"])
@@ -258,13 +320,64 @@ def render_header(results, provider, path):
         st.caption(
             f"Letzte Messung: {stamp} · Modell: {', '.join(models)}"
         )
-    st.warning(
-        f"**V0 nutzt {len(results)} synthetische Test-Tickets** – "
-        "selbst geschriebene, eindeutige Beispiele. Die Werte zeigen, "
-        "dass die Messung funktioniert, nicht wie gut der Klassifikator "
-        "bei echten Kundentickets ist.",
-        icon="⚠️",
-    )
+    render_data_note(results, mode)
+
+
+def render_data_note(results, mode):
+    """Hinweis, woher die gemessenen Tickets kommen.
+
+    Je Modus ein anderer Text, dazu die Quelldatei, der Umfang und die
+    Labels, die der Klassifikator gar nicht treffen kann.
+    """
+    settings = MODES[mode]
+    try:
+        _, info = load_mode_tickets(mode)
+    except (FileNotFoundError, ValueError) as exc:
+        st.error(str(exc))
+        return
+
+    source = f"`{info['file']}` ({info['rows_in_file']} Zeilen)"
+    if settings["per_label"] is None:
+        drawn = "alle Tickets der messbaren Labels"
+    else:
+        drawn = (
+            f"{settings['per_label']} pro Label, Seed {info['seed']} – "
+            "jeder Lauf zieht dieselbe Stichprobe"
+        )
+
+    labels = f"alle {len(info['labels'])} Labels des Datensatzes"
+    if mode == "smoke":
+        st.info(
+            f"**Rauchtest mit {len(results)} echten Tickets** aus "
+            f"{source}, {labels}. {drawn.capitalize()}. Gedacht zum "
+            "Prüfen, ob die Messung läuft – zu klein für belastbare "
+            "Aussagen.",
+            icon="🔎",
+        )
+    elif mode == "final":
+        st.success(
+            f"**Endabnahme mit {len(results)} Tickets** aus {source}, "
+            f"{labels} – unabhängige Testdaten. "
+            f"{drawn.capitalize()}.",
+            icon="✅",
+        )
+    else:
+        st.info(
+            f"**{len(results)} echte Tickets** aus {source}, "
+            f"{labels}. {drawn}.",
+            icon="📊",
+        )
+
+    if info["labels_unreachable"]:
+        st.warning(
+            "**Unerreichbar: "
+            f"{', '.join(info['labels_unreachable'])}** – für diese "
+            "Labels hat der Klassifikator keine Kategorie, er kann sie "
+            "also nie treffen. Sie werden mitgemessen und zählen als "
+            "falsch. Das drückt Accuracy und Macro-F1 und ist genau "
+            "die Lücke, die Kenans Ticket schließt.",
+            icon="⚠️",
+        )
 
 
 def render_kpis(results):
@@ -310,14 +423,37 @@ def render_kpis(results):
         st.markdown(METRIC_EXPLANATIONS)
 
 
-def version_metrics(version):
-    """Kennzahlen einer Version, oder None wenn sie fehlt.
+def for_display(rows):
+    """Tabelle fuer die Anzeige aufbereiten.
 
+    Antworten, die es im Datensatz nicht gibt, stehen in eckigen
+    Klammern. Die sollen im Dashboard nicht auftauchen, deshalb wird
+    die Zelle geleert. Die Zeile bleibt stehen und zaehlt weiter als
+    falsch - nur der erfundene Name verschwindet.
+    """
+    cleaned = []
+    for row in rows:
+        row = dict(row)
+        value = str(row.get("predicted", ""))
+        if value.startswith("["):
+            row["predicted"] = "–"
+        cleaned.append(row)
+    return pd.DataFrame(cleaned)
+
+
+def version_metrics(version, mode=None):
+    """Kennzahlen einer Version fuer die gewaehlte Datenquelle.
+
+    Der Pfad wird hier aus Verfahren und Modus gebildet, damit die
+    Tabelle immer dieselbe Datenquelle zeigt wie der Rest der Seite.
     Eine Version ohne Ergebnisdatei liefert bewusst None. Es werden
     niemals Platzhalterzahlen erfunden.
     """
-    path = version["path"]
-    if path is None or not path.is_file():
+    provider = version["provider"]
+    if provider is None:
+        return None
+    path = results_path(provider, mode)
+    if not path.is_file():
         return None
     results = load_results(path)
     if not results:
@@ -562,11 +698,11 @@ def render_prompts(measured):
                 st.markdown("_Prompt noch nicht festgelegt._")
 
 
-def render_version_comparison():
+def render_version_comparison(mode=None):
     """Vergleichstabelle und Entwicklungsdiagramm der Versionen."""
     measured = {}
     for version in VERSIONS:
-        data = version_metrics(version)
+        data = version_metrics(version, mode)
         if data is not None:
             measured[version["key"]] = data
 
@@ -604,15 +740,15 @@ def main():
         layout="wide",
     )
 
-    provider = render_sidebar()
-    path = results_path(provider)
+    provider, mode = render_sidebar()
+    path = results_path(provider, mode)
 
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
-            f"Für \"{PROVIDERS[provider]['label']}\" gibt es noch keine "
-            "Ergebnisse. Bitte links auf \"Evaluation neu ausführen\" "
-            "klicken."
+            f"Für \"{PROVIDERS[provider]['label']}\" mit der Quelle "
+            f"\"{mode_label(mode)}\" gibt es noch keine Ergebnisse. "
+            "Bitte links auf \"Evaluation neu ausführen\" klicken."
         )
         return
 
@@ -621,20 +757,20 @@ def main():
         st.warning("Die Ergebnisdatei ist leer.")
         return
 
-    render_header(results, provider, path)
+    render_header(results, provider, path, mode)
     render_kpis(results)
     st.divider()
 
-    render_version_comparison()
+    render_version_comparison(mode)
     st.divider()
 
     st.subheader("Alle Tickets")
-    st.dataframe(pd.DataFrame(results), width="stretch")
+    st.dataframe(for_display(results), width="stretch")
 
     st.subheader("Fehlklassifikationen")
     errors = misclassifications(results)
     if errors:
-        st.dataframe(pd.DataFrame(errors), width="stretch")
+        st.dataframe(for_display(errors), width="stretch")
     else:
         st.info("Keine Fehlklassifikationen.")
 

@@ -1,22 +1,35 @@
-"""Evaluation des Ticket-Klassifikators an festen Testtickets.
+"""Evaluation des Ticket-Klassifikators am Bitext-Datensatz.
 
-Misst wahlweise den Regel-Klassifikator oder Gemini mit dem bestehenden
-Prompt aus backend/llm_classifier.py, vergleicht das Ergebnis mit der
-Ground Truth und berechnet Accuracy, Precision, Recall und Macro-F1.
-Jedes Verfahren schreibt in eine eigene CSV unter results/evaluation/.
+Ground Truth sind die Labels aus data/processed/ - sie sind die
+Richtlinie. Die Antwort des Klassifikators wird dafuer in ein Label
+uebersetzt. Gemessen werden Accuracy, Precision, Recall und Macro-F1.
 
-Das Backend wird nur gelesen, nie veraendert.
+Drei Modi, jeder mit fester Stichprobe (Seed 42):
+    1. smoke       5 pro Label aus validation.csv - laeuft die Messung?
+    2. validation  20 pro Label aus validation.csv - Prompts vergleichen
+    3. final       alle Tickets aus test.csv - unabhaengige Abnahme
+
+Jede Kombination aus Modus und Verfahren schreibt in eine eigene CSV
+unter results/evaluation/, zum Beispiel smoke_v0.csv.
+
+Das Backend und der Datensatz werden nur gelesen, nie veraendert.
 
 Starten aus dem Projekt-Root:
-    python3 -m evaluation.evaluate                      # Regeln
-    python3 -m evaluation.evaluate --provider gemini    # Gemini
+    python3 -m evaluation.evaluate                        # smoke
+    python3 -m evaluation.evaluate --mode validation
+    python3 -m evaluation.evaluate --mode final
+    python3 -m evaluation.evaluate --provider gemini
 """
 
 import argparse
 import csv
 from pathlib import Path
 
-from backend.classifier import predict_ticket
+import pandas as pd
+
+from backend import classifier as backend_classifier
+from backend.classifier import dataset_label_for, predict_ticket
+from backend.data_loader import load_dataset
 from backend.llm_classifier import (
     DEFAULT_MODEL,
     LLMError,
@@ -27,6 +40,31 @@ from backend.llm_classifier import (
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"
 ENV_PATH = PROJECT_ROOT / "backend" / ".env"
+DATA_DIR = PROJECT_ROOT / "data" / "processed"
+
+# Auswertungs-Modi. "per_label" ist die Zahl der Tickets, die pro
+# Datensatz-Label gezogen wird; None bedeutet "alle nehmen".
+MODES = {
+    "smoke": {
+        "label": "Rauchtest",
+        "file": "validation.csv",
+        "per_label": 5,
+    },
+    "validation": {
+        "label": "Prompt-Validierung",
+        "file": "validation.csv",
+        "per_label": 20,
+    },
+    "final": {
+        "label": "Endabnahme",
+        "file": "test.csv",
+        "per_label": None,
+    },
+}
+
+# Fester Seed, damit jeder Lauf und jeder Teamrechner dieselbe
+# Stichprobe zieht.
+SAMPLE_SEED = 42
 
 # Verfahren, die gemessen werden koennen. Jedes schreibt in eine eigene
 # Datei, damit ein Lauf nie das Ergebnis des anderen ueberschreibt.
@@ -35,11 +73,11 @@ GEMINI = "gemini"
 PROVIDERS = {
     BASELINE: {
         "label": "Regeln (V0)",
-        "file": "evaluation_v0.csv",
+        "suffix": "v0",
     },
     GEMINI: {
         "label": "Gemini (bestehender Prompt)",
-        "file": "evaluation_gemini.csv",
+        "suffix": "gemini",
     },
 }
 
@@ -51,9 +89,9 @@ ENV_KEYS = (
     "LLM_CATEGORIES",
 )
 
-RESULTS_PATH = RESULTS_DIR / PROVIDERS[BASELINE]["file"]
 FIELDNAMES = [
     "ticket_nr",
+    "ticket_id",
     "text",
     "expected",
     "predicted",
@@ -61,37 +99,6 @@ FIELDNAMES = [
     "model_version",
     "correct",
     "error",
-]
-
-# Die 5 freigegebenen Testtickets.
-# "expected" ist die Ground Truth, also unsere menschliche Einordnung.
-TEST_TICKETS = [
-    {
-        "text": "I want to return the damaged lamp and get a refund.",
-        "expected": "Returns",
-    },
-    {
-        "text": (
-            "Where is my parcel? The tracking number has not "
-            "updated in five days."
-        ),
-        "expected": "Shipping",
-    },
-    {
-        "text": "I was charged twice for the same invoice last month.",
-        "expected": "Billing",
-    },
-    {
-        "text": "I cannot sign in and my password reset link does not work.",
-        "expected": "Account",
-    },
-    {
-        "text": (
-            "Every time I click checkout I get an error and the "
-            "page does not load."
-        ),
-        "expected": "Technical",
-    },
 ]
 
 
@@ -115,9 +122,107 @@ def load_env(path=ENV_PATH):
     return values
 
 
-def results_path(provider=BASELINE):
-    """Ergebnisdatei des jeweiligen Verfahrens."""
-    return RESULTS_DIR / PROVIDERS[provider]["file"]
+def mode_number(mode):
+    """Platz des Modus in der Reihenfolge: smoke 1, final 3."""
+    return list(MODES).index(mode) + 1
+
+
+def results_path(provider, mode):
+    """Ergebnisdatei: je Verfahren und Modus eine eigene.
+
+    Beispiel: smoke + Regeln -> results/evaluation/01_smoke_v0.csv.
+    Die fuehrende Nummer sorgt dafuer, dass die Dateien im Ordner in
+    der Reihenfolge der Modi stehen. So ueberschreibt kein Lauf das
+    Ergebnis eines anderen.
+    """
+    suffix = PROVIDERS[provider]["suffix"]
+    return RESULTS_DIR / f"{mode_number(mode):02d}_{mode}_{suffix}.csv"
+
+
+def category_to_label():
+    """App-Kategorie -> Datensatz-Label, aus dem Backend gelesen.
+
+    Gemessen wird in den Labels des Datensatzes, denn die sind unsere
+    Richtlinie. Der Klassifikator antwortet aber in Kategorien, also
+    muss seine Antwort uebersetzt werden.
+
+    Die Zuordnung wird nicht hier gepflegt, sondern aus Kenans
+    dataset_label_for gelesen.
+    """
+    mapping = {}
+    for category in configured_categories(""):
+        label = dataset_label_for(category)
+        if label:
+            mapping[category] = label
+    return mapping
+
+
+def to_dataset_label(category, mapping=None):
+    """Antwort des Klassifikators als Datensatz-Label.
+
+    Kategorien ohne Label - heute Returns, Technical und General -
+    bekommen ihren Namen in Klammern. So ist in der Auswertung
+    sichtbar, was der Klassifikator wirklich geantwortet hat, und es
+    zaehlt zugleich als falsch, weil es kein Label des Datensatzes ist.
+    """
+    mapping = mapping if mapping is not None else category_to_label()
+    return mapping.get(category, f"[{category}]")
+
+
+def load_mode_tickets(mode, seed=SAMPLE_SEED):
+    """Tickets eines Modus aus dem Datensatz ziehen.
+
+    Ground Truth ist das Label des Datensatzes, unveraendert. Es wird
+    kein Label weggelassen - alle 9 werden gemessen. Je Label werden
+    "per_label" Zeilen gezogen (None = alle). Die CSV bleibt unberuehrt.
+
+    Gibt (tickets, info) zurueck.
+    """
+    if mode not in MODES:
+        raise ValueError(f"Unbekannter Modus: {mode}")
+
+    settings = MODES[mode]
+    path = DATA_DIR / settings["file"]
+    data = load_dataset(path)
+
+    # Vor dem Ziehen sortieren: so haengt die Stichprobe nicht an der
+    # Zeilenreihenfolge der Datei, sondern nur an Datei, Anzahl und Seed.
+    data = data.sort_values("ticket_id")
+
+    per_label = settings["per_label"]
+    drawn = data
+    if per_label is not None:
+        parts = []
+        for _, group in data.groupby("label", sort=True):
+            take = min(per_label, len(group))
+            parts.append(group.sample(n=take, random_state=seed))
+        drawn = pd.concat(parts).sort_values("ticket_id")
+
+    tickets = [
+        {
+            "ticket_id": row.ticket_id,
+            "text": row.text,
+            "expected": row.label,
+        }
+        for row in drawn.itertuples(index=False)
+    ]
+
+    labels = sorted(data["label"].unique())
+    reachable = set(category_to_label().values())
+    info = {
+        "mode": mode,
+        "label": settings["label"],
+        "file": settings["file"],
+        "per_label": per_label,
+        "tickets": len(tickets),
+        "rows_in_file": len(data),
+        "labels": labels,
+        "labels_unreachable": [
+            name for name in labels if name not in reachable
+        ],
+        "seed": seed,
+    }
+    return tickets, info
 
 
 def classify_ticket(text, provider=BASELINE, env=None):
@@ -157,21 +262,28 @@ def classify_ticket(text, provider=BASELINE, env=None):
             prediction.model_version, "")
 
 
-def run_evaluation(tickets=TEST_TICKETS, provider=BASELINE):
-    """Misst alle Tickets mit dem gewaehlten Verfahren."""
+def run_evaluation(tickets, provider=BASELINE):
+    """Misst alle Tickets mit dem gewaehlten Verfahren.
+
+    Ground Truth ist das Label des Datensatzes, die Antwort des
+    Klassifikators wird dafuer in ein Label uebersetzt.
+    """
     env = load_env() if provider == GEMINI else {}
+    mapping = category_to_label()
     results = []
     for ticket in tickets:
         category, confidence, model_version, error = classify_ticket(
             ticket["text"], provider=provider, env=env,
         )
+        predicted = to_dataset_label(category, mapping)
         results.append({
+            "ticket_id": ticket.get("ticket_id", ""),
             "text": ticket["text"],
             "expected": ticket["expected"],
-            "predicted": category,
+            "predicted": predicted,
             "confidence": confidence,
             "model_version": model_version,
-            "correct": category == ticket["expected"],
+            "correct": predicted == ticket["expected"],
             "error": error,
         })
     return results
@@ -190,9 +302,14 @@ def per_category_scores(results):
 
     TP: richtig erkannt. FP: falsch in diese Kategorie gesteckt.
     FN: gehoert hierher, wurde aber anders einsortiert.
+
+    Gewertet werden nur Kategorien, die in der Ground Truth vorkommen.
+    Antwortet der Klassifikator etwas, das es dort nicht gibt - heute
+    General und Returns -, zaehlt das als Fehler bei der erwarteten
+    Kategorie, bekommt aber keine eigene Zeile. Sonst wuerde der
+    Macro-F1 ueber erfundene Klassen gemittelt.
     """
     categories = {result["expected"] for result in results}
-    categories |= {result["predicted"] for result in results}
 
     scores = {}
     for category in sorted(categories):
@@ -251,7 +368,7 @@ def misclassifications(results):
     ]
 
 
-def save_results(results, path=RESULTS_PATH):
+def save_results(results, path):
     """Schreibt eine Zeile pro Ticket als CSV und gibt den Pfad zurueck.
 
     Der Zielordner wird angelegt, falls er noch nicht existiert.
@@ -265,6 +382,7 @@ def save_results(results, path=RESULTS_PATH):
         for number, result in enumerate(results, start=1):
             writer.writerow({
                 "ticket_nr": number,
+                "ticket_id": result.get("ticket_id", ""),
                 "text": result["text"],
                 "expected": result["expected"],
                 "predicted": result["predicted"],
@@ -312,9 +430,9 @@ def print_metrics(results):
 
 
 def parse_args(argv=None):
-    """Liest das gewuenschte Verfahren von der Kommandozeile."""
+    """Liest Verfahren und Modus von der Kommandozeile."""
     parser = argparse.ArgumentParser(
-        description="Misst den Ticket-Klassifikator an festen Tickets.",
+        description="Misst den Ticket-Klassifikator.",
     )
     parser.add_argument(
         "--provider",
@@ -322,30 +440,74 @@ def parse_args(argv=None):
         default=BASELINE,
         help="baseline = Regeln (Standard), gemini = Gemini",
     )
+    parser.add_argument(
+        "--mode",
+        choices=list(MODES),
+        default="smoke",
+        help=(
+            "Datenquelle. smoke = 5 pro Label (Standard), "
+            "validation = 20 pro Label, beide aus validation.csv. "
+            "final = alle Tickets aus test.csv"
+        ),
+    )
     return parser.parse_args(argv)
 
 
-def main(argv=None):
-    provider = parse_args(argv).provider
-    print(f"Verfahren: {PROVIDERS[provider]['label']}")
+def print_sample_info(info):
+    """Woher die Tickets kommen und was weggelassen wurde."""
+    print(f"Datenquelle: {info['file']} ({info['rows_in_file']} Zeilen)")
+    if info["per_label"] is None:
+        print("Stichprobe:  alle Tickets der messbaren Labels")
+    else:
+        print(
+            f"Stichprobe:  {info['per_label']} pro Label, "
+            f"Seed {info['seed']}"
+        )
+    print(f"Tickets:     {info['tickets']}")
+    print(
+        f"Labels:      {len(info['labels'])} - "
+        f"{', '.join(info['labels'])}"
+    )
+    if info["labels_unreachable"]:
+        print(
+            "Unerreichbar: "
+            f"{', '.join(info['labels_unreachable'])} - der "
+            "Klassifikator hat keine Kategorie dafuer und kann sie "
+            "nie treffen"
+        )
     print()
 
-    results = run_evaluation(provider=provider)
-    for number, result in enumerate(results, start=1):
-        mark = "OK " if result["correct"] else "FALSCH"
-        print(f"{mark} Ticket {number}")
-        print(f"   Text:       {result['text']}")
-        print(f"   Erwartet:   {result['expected']}")
-        print(f"   Vorhersage: {result['predicted']}")
-        print(f"   Confidence: {result['confidence']}")
-        print(f"   Modell:     {result['model_version']}")
-        if result["error"]:
-            print(f"   Fehler:     {result['error']}")
-        print()
+
+def main(argv=None):
+    args = parse_args(argv)
+    provider, mode = args.provider, args.mode
+    print(f"Verfahren: {PROVIDERS[provider]['label']}")
+    print(f"Modus:     {MODES[mode]['label']} ({mode})")
+    print()
+
+    tickets, info = load_mode_tickets(mode)
+    print_sample_info(info)
+
+    results = run_evaluation(tickets=tickets, provider=provider)
+
+    # Einzelne Tickets nur bei kleinen Laeufen ausgeben, sonst
+    # verschwinden die Kennzahlen in hunderten Zeilen.
+    if len(results) <= 10:
+        for number, result in enumerate(results, start=1):
+            mark = "OK " if result["correct"] else "FALSCH"
+            print(f"{mark} Ticket {number}")
+            print(f"   Text:       {result['text']}")
+            print(f"   Erwartet:   {result['expected']}")
+            print(f"   Vorhersage: {result['predicted']}")
+            print(f"   Confidence: {result['confidence']}")
+            print(f"   Modell:     {result['model_version']}")
+            if result["error"]:
+                print(f"   Fehler:     {result['error']}")
+            print()
 
     print_metrics(results)
 
-    path = save_results(results, results_path(provider))
+    path = save_results(results, results_path(provider, mode))
     print()
     print(f"Gespeichert: {path.relative_to(PROJECT_ROOT)}")
 

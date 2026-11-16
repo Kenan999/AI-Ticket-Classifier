@@ -7,25 +7,78 @@ still missing. For commands, see the Evaluation section in the README.
 
 The evaluation lives in `evaluation/` and only ever *reads* the backend:
 
-- `evaluate.py` — test tickets, measurement, metrics, CSV export
+- `evaluate.py` — sampling, measurement, metrics, CSV export
 - `dashboard.py` — Streamlit view of the results
 
-It imports `predict_ticket` from `backend/classifier.py` and
+It imports `predict_ticket` and `dataset_label_for` from
+`backend/classifier.py`, `load_dataset` from `backend/data_loader.py` and
 `classify_with_gemini` from `backend/llm_classifier.py`. No backend file is
-modified, no Flask app is started and no SQLite database is touched.
+modified, no Flask app is started and no SQLite database is touched. The
+dataset CSVs are read only — the sampling happens in memory, so no extra
+dataset file is ever written.
 
-## Test data (current state)
+## Test data
 
-Five simple synthetic test tickets, one per category (Returns, Shipping,
-Billing, Account, Technical), written by hand.
+The prepared Bitext splits in `data/processed/`, produced by
+`python backend/prepare_data.py`. Nine labels, 200 rows per label in both
+`validation.csv` and `test.csv` (1,800 rows each). The evaluation only ever
+reads them.
 
-**Every score is currently 1.00. That is a property of the test set, not of
-the classifier.** The tickets contain the exact keywords the rule baseline
-looks for, so it cannot fail them. The numbers prove that the measurement
-pipeline works; they say nothing about real customer tickets.
+### Ground truth
 
-Replacing these with real labelled data is the single most valuable next
-step. Until then, treat every chart on the dashboard as a smoke test.
+**The dataset labels are the reference, not the classifier's categories.**
+The app answers in its own seven categories, so each answer is translated to a
+dataset label before it is compared:
+
+| App category | Dataset label |
+|---|---|
+| Shipping | SHIPPING |
+| Billing | PAYMENT |
+| Account | ACCOUNT |
+| Orders | ORDER |
+| Returns, Technical, General | *none* |
+
+The translation is read from `dataset_label_for` in `backend/classifier.py`,
+not maintained here, so it follows the backend automatically.
+
+An answer with no dataset label can never match and is counted as wrong. Those
+answers get no row of their own in the per-label table: macro-F1 is averaged
+over the nine real labels, never over invented ones.
+
+Five of the nine labels — CONTACT, DELIVERY, FEEDBACK, INVOICE, REFUND — have
+no category at all, so every ticket carrying them is wrong by construction.
+That is a real finding about coverage, not a measurement error, and it is
+stated on the dashboard.
+
+### Modes
+
+Each mode draws a fixed sample with `random_state=42`. The rows are sorted by
+`ticket_id` before and after drawing, so the sample depends only on file,
+count and seed — never on the row order in the file. Every run and every
+machine therefore measures exactly the same tickets, which is what makes two
+prompt versions comparable.
+
+| Mode | Source | Sample | Tickets | Purpose |
+|---|---|---|---|---|
+| `smoke` | `validation.csv` | 5 per label | 45 | does the measurement run? |
+| `validation` | `validation.csv` | 20 per label | 180 | compare prompts |
+| `final` | `test.csv` | all | 1,800 | independent acceptance |
+
+`test.csv` is reserved for the final mode and is never used while choosing a
+prompt.
+
+### Current numbers (rule baseline)
+
+| Mode | Accuracy | Macro-F1 |
+|---|---|---|
+| smoke | 0.33 | 0.31 |
+| validation | 0.36 | 0.33 |
+| final | 0.31 | 0.30 |
+
+The three agree closely, which is the point of the smoke mode: 45 tickets
+already predict what 1,800 will say. Precision is high wherever the baseline
+commits to a category and recall is low — it falls back to `General` too
+often rather than classifying wrongly.
 
 ## What is measured
 
@@ -49,14 +102,17 @@ dependency list unchanged.
 
 ## Providers
 
-| Provider | Classifier | Prompt | Output file |
-|---|---|---|---|
-| `baseline` | `predict_ticket` (keyword rules) | none | `results/evaluation/evaluation_v0.csv` |
-| `gemini` | `classify_with_gemini` | the existing backend prompt | `results/evaluation/evaluation_gemini.csv` |
+| Provider | Classifier | Prompt |
+|---|---|---|
+| `baseline` | `predict_ticket` (keyword rules) | none |
+| `gemini` | `classify_with_gemini` | the existing backend prompt |
 
-Each provider writes its own file so one run never overwrites the other and
-the dashboard can show both side by side. The files are git-ignored runtime
-artefacts; run the evaluation yourself after cloning.
+Every combination of mode and provider writes its own file, named
+`{number}_{mode}_{provider}.csv` — for example
+`results/evaluation/01_smoke_v0.csv`. The leading number keeps the files in
+mode order in the folder. No run ever overwrites another, and the dashboard
+can show providers side by side. The files are git-ignored runtime artefacts;
+run the evaluation yourself after cloning.
 
 ### Design decisions
 
@@ -78,15 +134,19 @@ start Flask and create a SQLite file as an import side effect.
 **The API key is read from the backend's `.env` and used only for the
 request.** It is passed to the Gemini endpoint as the `x-goog-api-key`
 header, and is never logged, printed, written to a result file or included in
-an error message. `backend/.env` is git-ignored. Only the synthetic test
-tickets are sent to Google — no customer data.
+an error message. `backend/.env` is git-ignored. Only Bitext ticket texts are
+sent to Google — a public dataset under CDLA-Sharing-1.0, no customer data.
 
 ## Dashboard
 
-`python -m streamlit run evaluation/dashboard.py` shows the selected
-provider's KPIs, per-category results across versions, a comparison chart
-with target lines (set in `dashboard.py`, not yet agreed in the team), the
-prompt behind each version, all tickets and the misclassifications.
+`python -m streamlit run evaluation/dashboard.py` shows the KPIs for the
+selected provider and mode, per-label results across versions, a comparison
+chart with target lines (set in `dashboard.py`, not yet agreed in the team),
+the prompt behind each version, all tickets and the misclassifications.
+
+Mode and provider are chosen in the sidebar. The note at the top names the
+source file, the sample size and the labels the classifier cannot reach, so
+the numbers are never read without that context.
 
 Two notes for whoever works on it next:
 
@@ -108,5 +168,7 @@ be agreed in the team.
 
 ## Open points
 
-- Real labelled test data (currently five simple synthetic test tickets)
+- Five of the nine dataset labels have no category in the classifier
+  (CONTACT, DELIVERY, FEEDBACK, INVOICE, REFUND). A ticket is with the
+  backend owner.
 - Prompt variants V1–V3, once a prompt can be passed in
