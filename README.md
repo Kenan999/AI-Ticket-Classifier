@@ -20,10 +20,21 @@ replace the app's seven categories. Map the label sets explicitly before
 comparing app predictions against this dataset. See
 [dataset preparation details](docs/dataset_comparison.md).
 
+## Local setup
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
+
+`.venv/` stays outside Git. Activate it in every new terminal before running
+any of the commands below.
+
 ## Local API and tests
 
-Install dependencies with `python3 -m pip install -r requirements.txt` and start
-`python3 backend/app.py` (defaults to `127.0.0.1:8001`).
+Install dependencies with `python -m pip install -r requirements.txt` and start
+`python backend/app.py` (defaults to `127.0.0.1:8001`).
 
 - `GET /health`: health check.
 - `GET /providers`: list provider IDs, display labels, configuration status and the default provider; never returns keys or calls a cloud API.
@@ -33,6 +44,58 @@ Install dependencies with `python3 -m pip install -r requirements.txt` and start
 - `GET /case/<ticket_id>`: retrieves a saved ticket.
 - `POST /review`: approves or corrects a ticket with an explicit human decision;
   writes review feedback to CSV and the updated ticket to SQLite.
+
+## Evaluation
+
+`evaluation/` measures the classifier against the prepared Bitext splits. It
+imports the backend directly — no API, database or frontend — and never
+modifies backend files or the dataset. Run `python backend/prepare_data.py`
+first; the evaluation reads `data/processed/` and nothing else.
+
+The **dataset labels are the ground truth**. The classifier answers in the
+app's own categories, so its answer is translated to a dataset label before
+comparison. Categories with no dataset label — currently Returns, Technical
+and General — can never match and are counted as wrong.
+
+Three modes, each drawing a fixed sample with `random_state=42`, so every run
+and every machine measures exactly the same tickets:
+
+| Mode | Source | Sample | Purpose |
+|---|---|---|---|
+| `smoke` | `validation.csv` | 5 per label | does the measurement run? |
+| `validation` | `validation.csv` | 20 per label | compare prompts |
+| `final` | `test.csv` | all (200 per label) | independent acceptance |
+
+```bash
+python -m evaluation.evaluate                     # smoke, rule baseline
+python -m evaluation.evaluate --mode validation
+python -m evaluation.evaluate --mode final
+python -m evaluation.evaluate --provider gemini-v1 --mode validation
+python -m evaluation.evaluate --provider openai-v1 --mode validation
+python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
+```
+
+Gemini and OpenAI reuse their backend adapters and the shared system prompts
+in `evaluation/prompts.py`. V1 is the backend default. V2 and V3 start with the
+same wording and can be edited independently. Select a version with
+`--provider gemini-v1` through `gemini-v3`, or `openai-v1` through `openai-v3`.
+Set the matching `GEMINI_API_KEY` or `OPENAI_API_KEY` in the process environment
+or `backend/.env`. A final run makes 1,800 requests to the selected provider.
+
+Each combination of mode, provider, and prompt version writes its own CSV,
+including the version used. The rules still write `results/evaluation/01_smoke_v0.csv`. Those are runtime artefacts, are
+git-ignored and must not be committed, so run the evaluation once yourself
+before opening the dashboard. A provider call that fails is recorded as an error
+and counted as wrong; it does **not** fall back to the rule baseline, because a
+mixed result would not be measurable.
+
+Current scores for the rule baseline are around **0.31 accuracy** and
+**0.30 macro-F1** across all three modes. Five of the nine dataset labels have
+no counterpart in the classifier, which accounts for most of the gap. See
+[evaluation details](docs/evaluation.md) for the method, the metrics and the
+open points.
+
+## Tests
 
 Run isolated tests with `python3 -m unittest discover -s tests -v`.
 Cases are stored in `results/cases.sqlite` and review feedback in
