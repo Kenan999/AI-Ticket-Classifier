@@ -26,7 +26,8 @@ Install dependencies with `python3 -m pip install -r requirements.txt` and start
 `python3 backend/app.py` (defaults to `127.0.0.1:8001`).
 
 - `GET /health`: health check.
-- `POST /classify`: accepts JSON `{"text":"..."}`, classifies and stores a ticket.
+- `GET /providers`: list provider IDs, display labels, configuration status and the default provider; never returns keys or calls a cloud API.
+- `POST /classify`: accepts JSON `{"text":"...","provider":"openai"}`, classifies and stores a ticket. `provider` is optional: `baseline`, `openai` or `gemini`.
 - `GET /cases`: lists all saved tickets, newest first, with their current
   category, confidence, status and review fields. Empty database returns `[]`.
 - `GET /case/<ticket_id>`: retrieves a saved ticket.
@@ -44,9 +45,22 @@ provider. Gemini reads `GEMINI_API_KEY` and `GEMINI_MODEL` (default
 keep real keys out of source control and the frontend. OpenAI's key is read
 only from the process environment. See
 [optional LLM integration](docs/llm_integration.md) for additional Gemini settings.
-Missing keys or provider failures fall back to local rules; inspect
-`model_version` in the response to see which provider actually answered.
+When `provider` is omitted, the deployment default and existing local fallback
+behavior are retained. An explicit provider applies only to that request: it
+never changes other users' selections or the server environment. Explicit cloud
+selection returns HTTP 503 (`provider_not_configured`) when the key is missing,
+or HTTP 502 (`provider_unavailable`) if the call fails; no case is saved and no
+other provider is substituted. Invalid selections return HTTP 400.
+Successful cases include `requested_provider`, actual `provider`, `fallback_used`
+and `model_version`; these fields are persisted. Older stored cases may lack the
+new fields. `baseline` means local keyword rules, not a local LLM.
+
+For a future frontend selector, fetch `GET /providers`, display the labels, and
+send the selected ID in each `POST /classify`. `configured` only indicates that
+a key is present, not that it is valid or the service is reachable. Keep API keys
+and model settings on the server. This contract is implemented only in the
+backend development copy: frontend controls and deployment gateway routing for
+`/providers` still need separate integration before public use.
 The automated tests simulate cloud responses and do not validate live API access.
-The
-`Backend` branch is for development; push, open a PR, test/review and merge
+The `Backend` branch is for development; push, open a PR, test/review and merge
 into `main` for the existing deployment workflow. This checkout is not live.

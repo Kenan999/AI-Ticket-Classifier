@@ -3,7 +3,7 @@
 Run from the repository root:
     python3 backend/app.py
 
-The first-sprint API stores active cases in memory and review feedback in CSV.
+The API stores cases in SQLite and review feedback in CSV.
 It is a local development service, not a public/authenticated deployment.
 """
 
@@ -28,6 +28,15 @@ except ImportError:  # Supports direct execution: python3 backend/app.py
     from config import openai_api_key
     from openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
     from llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
+
+
+PROVIDERS = ("baseline", "openai", "gemini")
+
+
+def default_provider():
+    provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
+    # Preserve the existing baseline behavior for unknown deployment settings.
+    return provider if provider in PROVIDERS else "baseline"
 
 
 def create_app(review_path=None, case_db_path=None):
@@ -85,6 +94,21 @@ def create_app(review_path=None, case_db_path=None):
     def health():
         return jsonify({"status": "ok"})
 
+    @app.get("/providers")
+    def providers():
+        # Configuration presence is not a live provider health check.
+        response = jsonify({
+            "default_provider": default_provider(),
+            "providers": [
+                {"id": "baseline", "label": "Local rules", "configured": True},
+                {"id": "openai", "label": "OpenAI", "configured": bool(openai_api_key())},
+                {"id": "gemini", "label": "Gemini",
+                 "configured": bool(os.getenv("GEMINI_API_KEY", "").strip())},
+            ],
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.post("/classify")
     def classify():
         data = request.get_json(silent=True)
@@ -97,41 +121,39 @@ def create_app(review_path=None, case_db_path=None):
         if len(text) > 4000:
             return error("text_too_long", "text must be at most 4000 characters")
 
-        # Keep the response/SQLite contract stable for the existing frontend.
-        # Remote providers are opt-in; failures retain the local baseline.
-        prediction = predict_ticket(text)
-        provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
-        if provider == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if api_key:
-                try:
-                    prediction = classify_with_gemini(
-                        text,
-                        api_key=api_key,
-                        categories=configured_categories(),
-                        model=os.getenv("GEMINI_MODEL", DEFAULT_MODEL),
-                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
-                    )
-                except (LLMError, ValueError, OverflowError) as exc:
-                    # Only report the failure class: never log ticket text or secrets.
-                    app.logger.warning("Gemini classification unavailable (%s); using baseline", type(exc).__name__)
+        explicit_provider = "provider" in data
+        provider = data.get("provider") if explicit_provider else default_provider()
+        if not isinstance(provider, str) or provider not in PROVIDERS:
+            return error("invalid_provider", "provider must be baseline, openai or gemini")
+
+        # Only this request selects the provider; never mutate process settings.
+        used_provider = "baseline"
+        prediction = None
+        if provider != "baseline":
+            api_key = (openai_api_key() if provider == "openai"
+                       else os.getenv("GEMINI_API_KEY", "").strip())
+            if not api_key:
+                if explicit_provider:
+                    return error("provider_not_configured",
+                                 "Selected provider is not configured on the server", 503)
+                app.logger.warning("%s selected but key missing; using baseline", provider)
             else:
-                app.logger.warning("Gemini selected but GEMINI_API_KEY missing; using baseline")
-        elif provider == "openai":
-            api_key = openai_api_key()
-            if api_key:
                 try:
-                    prediction = classify_with_openai(
-                        text,
-                        api_key=api_key,
-                        categories=configured_categories(),
-                        model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
-                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
+                    adapter = classify_with_openai if provider == "openai" else classify_with_gemini
+                    model = (os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+                             if provider == "openai" else os.getenv("GEMINI_MODEL", DEFAULT_MODEL))
+                    prediction = adapter(
+                        text, api_key=api_key, categories=configured_categories(),
+                        model=model, timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
                     )
+                    used_provider = provider
                 except (LLMError, ValueError, OverflowError) as exc:
-                    app.logger.warning("OpenAI classification unavailable (%s); using baseline", type(exc).__name__)
-            else:
-                app.logger.warning("OpenAI selected but key missing; using baseline")
+                    # Never expose provider responses, ticket text or keys in errors.
+                    app.logger.warning("%s classification unavailable (%s)", provider, type(exc).__name__)
+                    if explicit_provider:
+                        return error("provider_unavailable", "Selected provider could not classify the ticket", 502)
+        if prediction is None:
+            prediction = predict_ticket(text)
         review_required = prediction.confidence < REVIEW_THRESHOLD
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
@@ -145,6 +167,9 @@ def create_app(review_path=None, case_db_path=None):
             "review_required": review_required,
             "reply_confirmed": False,
             "model_version": prediction.model_version,
+            "requested_provider": provider,
+            "provider": used_provider,
+            "fallback_used": used_provider != provider,
         }
         with lock:
             store_case(case)
