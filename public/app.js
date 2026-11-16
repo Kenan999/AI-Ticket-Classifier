@@ -2,8 +2,8 @@
 // The backend connection is added step by step. So far: GET /health, POST /classify,
 // POST /review and GET /cases (saved tickets are loaded when the page opens).
 
-// Backend API address. Change it here if the backend runs somewhere else.
-const API_BASE_URL = "http://127.0.0.1:8001";
+// The testing starter supplies a runtime override; normal startup keeps its default.
+const API_BASE_URL = window.APP_CONFIG?.apiBaseUrl || "http://127.0.0.1:8001";
 
 const MIN_MESSAGE_LENGTH = 10;
 
