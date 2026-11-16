@@ -77,3 +77,28 @@ When using the shared backend during frontend development, keep the downloaded
 force-add it or commit access tokens. Follow the team setup guide for the local
 connection workflow. Updating this ignore rule does not change the backend or
 deploy the frontend.
+
+## Use the deployed backend while developing the frontend
+
+Use the ticket system's **Project Links → Set up local testing** guide.
+Download the latest `developer_client.py` into your frontend checkout's root
+and create your own one-hour access token. With the updated frontend runtime
+configuration in place, run:
+
+```sh
+python3 developer_client.py --frontend public --port 8015
+```
+
+For a checkout whose website folder is named `frontend`, use `--frontend frontend`.
+Paste the token at the hidden prompt, then open the printed local URL. The
+starter supplies the API address automatically through `runtime-config.js`;
+there is no manual edit to `app.js`. This requires a frontend checkout that includes `runtime-config.js`;
+update your frontend branch before using this workflow.
+
+The usual startup remains unchanged. This separate testing command connects
+the local frontend to the deployed backend; you do not start a local backend.
+API keys stay on the server and the token stays in the starter process. Requests
+use shared live cases, including review changes. Use fictional messages.
+Stop with Control-C. If the token expires, create another and restart.
+If the port is busy, choose another with `--port`; the API address follows it.
+Do not commit the downloaded starter or access tokens.
