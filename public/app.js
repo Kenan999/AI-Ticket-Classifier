@@ -18,9 +18,11 @@ const STATUS_LABELS = {
 // Name sent to the backend as the reviewer (fixed for now).
 const REVIEWER_NAME = "support-agent";
 
-// Categories a reviewer can choose from when correcting a ticket (same names as the backend).
-// General = fallback when the backend finds no keyword.
-const CATEGORIES = ["Returns", "Shipping", "Billing", "Account", "Technical", "Orders", "General"];
+// Exact Bitext category values accepted by the review API.
+const CATEGORIES = [
+  "ACCOUNT", "ORDER", "INVOICE", "CONTACT", "PAYMENT",
+  "FEEDBACK", "REFUND", "DELIVERY", "SHIPPING",
+];
 
 // Development helper: one example ticket per backend category, for the buttons under the form.
 const EXAMPLE_TICKETS = [

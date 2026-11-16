@@ -2,6 +2,8 @@
 
 The frontend source on this branch is in `public/`.
 
+The Human Review correction menu submits the backend's nine Bitext labels.
+
 ## Downloaded development starter
 
 When using the shared backend during frontend development, keep the downloaded
