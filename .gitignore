@@ -16,3 +16,6 @@ results/
 
 # Private Projektregeln fuer Claude Code
 /CLAUDE.md
+
+# Downloaded local frontend starter (keep outside Git)
+/developer_client.py
