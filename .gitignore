@@ -12,3 +12,6 @@ results/
 
 # IDE-local project files
 .idea/
+
+# Downloaded local frontend starter (keep outside Git)
+/developer_client.py
