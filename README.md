@@ -69,3 +69,11 @@ backend development copy: frontend controls and deployment gateway routing for
 The automated tests simulate cloud responses and do not validate live API access.
 The `Backend` branch is for development; push, open a PR, test/review and merge
 into `main` for the existing deployment workflow. This checkout is not live.
+
+## Downloaded development starter
+
+When using the shared backend during frontend development, keep the downloaded
+`developer_client.py` in the project root. Git ignores that local file; do not
+force-add it or commit access tokens. Follow the team setup guide for the local
+connection workflow. Updating this ignore rule does not change the backend or
+deploy the frontend.
