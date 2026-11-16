@@ -19,10 +19,14 @@ from flask import Flask, jsonify, request
 try:
     from .classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from .review import ReviewError, save_review
+    from .config import openai_api_key
+    from .openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
     from .llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 except ImportError:  # Supports direct execution: python3 backend/app.py
     from classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from review import ReviewError, save_review
+    from config import openai_api_key
+    from openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
     from llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
 
@@ -94,7 +98,7 @@ def create_app(review_path=None, case_db_path=None):
             return error("text_too_long", "text must be at most 4000 characters")
 
         # Keep the response/SQLite contract stable for the existing frontend.
-        # Gemini is opt-in. Errors fall back to the proven local baseline.
+        # Remote providers are opt-in; failures retain the local baseline.
         prediction = predict_ticket(text)
         provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
         if provider == "gemini":
@@ -113,6 +117,21 @@ def create_app(review_path=None, case_db_path=None):
                     app.logger.warning("Gemini classification unavailable (%s); using baseline", type(exc).__name__)
             else:
                 app.logger.warning("Gemini selected but GEMINI_API_KEY missing; using baseline")
+        elif provider == "openai":
+            api_key = openai_api_key()
+            if api_key:
+                try:
+                    prediction = classify_with_openai(
+                        text,
+                        api_key=api_key,
+                        categories=configured_categories(),
+                        model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
+                    )
+                except (LLMError, ValueError, OverflowError) as exc:
+                    app.logger.warning("OpenAI classification unavailable (%s); using baseline", type(exc).__name__)
+            else:
+                app.logger.warning("OpenAI selected but key missing; using baseline")
         review_required = prediction.confidence < REVIEW_THRESHOLD
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
