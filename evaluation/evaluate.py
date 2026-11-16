@@ -23,6 +23,7 @@ Starten aus dem Projekt-Root:
 
 import argparse
 import csv
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -36,6 +37,9 @@ from backend.llm_classifier import (
     classify_with_gemini,
     configured_categories,
 )
+
+from backend.openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
+from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"
@@ -76,8 +80,20 @@ PROVIDERS = {
         "suffix": "v0",
     },
     GEMINI: {
-        "label": "Gemini (bestehender Prompt)",
+        "label": "Gemini (Standard)",
         "suffix": "gemini",
+        "provider": GEMINI,
+        "prompt_version": DEFAULT_PROMPT_VERSION,
+    },
+    **{
+        f"{provider}-{version.lower()}": {
+            "label": f"{PROVIDER_NAMES[provider]} (Prompt {version})",
+            "suffix": f"{provider}_{version.lower()}",
+            "provider": provider,
+            "prompt_version": version,
+        }
+        for version, prompts in PROMPTS.items()
+        for provider in prompts
     },
 }
 
@@ -85,6 +101,8 @@ PROVIDERS = {
 ENV_KEYS = (
     "GEMINI_API_KEY",
     "GEMINI_MODEL",
+    "OPENAI_API_KEY",
+    "OPENAI_MODEL",
     "LLM_TIMEOUT_SECONDS",
     "LLM_CATEGORIES",
 )
@@ -97,21 +115,17 @@ FIELDNAMES = [
     "predicted",
     "confidence",
     "model_version",
+    "prompt_version",
     "correct",
     "error",
 ]
 
 
 def load_env(path=ENV_PATH):
-    """Liest die erlaubten Schluessel aus backend/.env.
-
-    Bewusst ohne Import von backend/app.py: der wuerde beim Import
-    Flask starten und eine SQLite-Datei anlegen.
-    """
+    """Liest erlaubte Einstellungen. Prozessvariablen haben Vorrang."""
     values = {}
-    if not path.is_file():
-        return values
-    for raw in path.read_text(encoding="utf-8").splitlines():
+    lines = path.read_text(encoding="utf-8").splitlines() if path.is_file() else []
+    for raw in lines:
         line = raw.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
@@ -119,6 +133,7 @@ def load_env(path=ENV_PATH):
         name = name.strip()
         if name in ENV_KEYS:
             values[name] = value.strip().strip('"\'')
+    values.update({name: os.environ[name] for name in ENV_KEYS if name in os.environ})
     return values
 
 
@@ -229,35 +244,42 @@ def classify_ticket(text, provider=BASELINE, env=None):
     """Klassifiziert einen Text mit dem gewaehlten Verfahren.
 
     Gibt (category, confidence, model_version, error) zurueck.
-    Bei einem Gemini-Fehler steht in error der Grund und die Kategorie
+    Bei einem Provider-Fehler steht in error der Grund und die Kategorie
     ist "FEHLER" - es wird NICHT heimlich auf die Regeln zurueckgefallen,
     sonst waere das Ergebnis eine Mischung aus beiden Verfahren.
     """
-    if provider != GEMINI:
+    method = PROVIDERS[provider]
+    if provider == BASELINE:
         prediction = predict_ticket(text)
         return (prediction.category, prediction.confidence,
                 prediction.model_version, "")
 
     env = env if env is not None else load_env()
-    api_key = env.get("GEMINI_API_KEY", "")
+    name = method["provider"]
+    if name == "openai":
+        adapter, default_model = classify_with_openai, DEFAULT_OPENAI_MODEL
+    else:
+        adapter, default_model = classify_with_gemini, DEFAULT_MODEL
+
+    prefix = name.upper()
+    key_name = f"{prefix}_API_KEY"
+    api_key = env.get(key_name, "").strip()
     if not api_key:
-        raise RuntimeError(
-            "GEMINI_API_KEY fehlt in backend/.env - "
-            "ohne Key kann Gemini nicht gemessen werden."
-        )
+        raise RuntimeError(f"{key_name} fehlt in der Umgebung oder in backend/.env.")
+
     try:
-        prediction = classify_with_gemini(
+        categories = configured_categories(env.get("LLM_CATEGORIES", ""))
+        prediction = adapter(
             text,
             api_key=api_key,
-            categories=configured_categories(
-                env.get("LLM_CATEGORIES", "")
-            ),
-            model=env.get("GEMINI_MODEL", DEFAULT_MODEL),
+            categories=categories,
+            model=env.get(f"{prefix}_MODEL", default_model),
             timeout=float(env.get("LLM_TIMEOUT_SECONDS", "8")),
+            prompt_version=method["prompt_version"],
         )
     except (LLMError, ValueError, OverflowError) as exc:
         # Nie den Tickettext oder den Key mit ausgeben.
-        return ("FEHLER", 0.0, "gemini:nicht erreichbar", str(exc))
+        return ("FEHLER", 0.0, f"{name}:nicht erreichbar", str(exc))
     return (prediction.category, prediction.confidence,
             prediction.model_version, "")
 
@@ -268,7 +290,8 @@ def run_evaluation(tickets, provider=BASELINE):
     Ground Truth ist das Label des Datensatzes, die Antwort des
     Klassifikators wird dafuer in ein Label uebersetzt.
     """
-    env = load_env() if provider == GEMINI else {}
+    env = load_env() if provider != BASELINE else {}
+    prompt_version = PROVIDERS[provider].get("prompt_version", "")
     mapping = category_to_label()
     results = []
     for ticket in tickets:
@@ -283,6 +306,7 @@ def run_evaluation(tickets, provider=BASELINE):
             "predicted": predicted,
             "confidence": confidence,
             "model_version": model_version,
+            "prompt_version": prompt_version,
             "correct": predicted == ticket["expected"],
             "error": error,
         })
@@ -388,6 +412,7 @@ def save_results(results, path):
                 "predicted": result["predicted"],
                 "confidence": result["confidence"],
                 "model_version": result["model_version"],
+                "prompt_version": result.get("prompt_version", ""),
                 "correct": result["correct"],
                 "error": result.get("error", ""),
             })
@@ -438,7 +463,7 @@ def parse_args(argv=None):
         "--provider",
         choices=sorted(PROVIDERS),
         default=BASELINE,
-        help="baseline = Regeln (Standard), gemini = Gemini",
+        help="Regeln, Standard-Gemini oder ein versionierter Gemini-/OpenAI-Prompt",
     )
     parser.add_argument(
         "--mode",

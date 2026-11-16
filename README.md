@@ -70,18 +70,22 @@ and every machine measures exactly the same tickets:
 python -m evaluation.evaluate                     # smoke, rule baseline
 python -m evaluation.evaluate --mode validation
 python -m evaluation.evaluate --mode final
-python -m evaluation.evaluate --provider gemini
+python -m evaluation.evaluate --provider gemini-v1 --mode validation
+python -m evaluation.evaluate --provider openai-v1 --mode validation
 python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
 ```
 
-The Gemini run reuses `classify_with_gemini` with its existing system prompt
-and needs `GEMINI_API_KEY` in `backend/.env` (copy `backend/.env.example`).
-Note that `--mode final --provider gemini` sends 1,800 requests.
+Gemini and OpenAI reuse their backend adapters and the shared system prompts
+in `evaluation/prompts.py`. V1 is the backend default. V2 and V3 start with the
+same wording and can be edited independently. Select a version with
+`--provider gemini-v1` through `gemini-v3`, or `openai-v1` through `openai-v3`.
+Set the matching `GEMINI_API_KEY` or `OPENAI_API_KEY` in the process environment
+or `backend/.env`. A final run makes 1,800 requests to the selected provider.
 
-Each combination of mode and provider writes its own file, for example
-`results/evaluation/01_smoke_v0.csv`. Those are runtime artefacts, are
+Each combination of mode, provider, and prompt version writes its own CSV,
+including the version used. The rules still write `results/evaluation/01_smoke_v0.csv`. Those are runtime artefacts, are
 git-ignored and must not be committed, so run the evaluation once yourself
-before opening the dashboard. A Gemini call that fails is recorded as an error
+before opening the dashboard. A provider call that fails is recorded as an error
 and counted as wrong; it does **not** fall back to the rule baseline, because a
 mixed result would not be measurable.
 

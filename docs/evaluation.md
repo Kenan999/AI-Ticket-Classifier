@@ -105,18 +105,19 @@ dependency list unchanged.
 | Provider | Classifier | Prompt |
 |---|---|---|
 | `baseline` | `predict_ticket` (keyword rules) | none |
-| `gemini` | `classify_with_gemini` | the existing backend prompt |
+| `gemini` | `classify_with_gemini` | backend default |
+| `gemini-v1` through `gemini-v3` | `classify_with_gemini` | selected version |
+| `openai-v1` through `openai-v3` | `classify_with_openai` | selected version |
 
-Every combination of mode and provider writes its own file, named
-`{number}_{mode}_{provider}.csv` — for example
-`results/evaluation/01_smoke_v0.csv`. The leading number keeps the files in
-mode order in the folder. No run ever overwrites another, and the dashboard
-can show providers side by side. The files are git-ignored runtime artefacts;
+Each combination of mode, provider, and version has its own CSV. For example,
+Gemini V2 validation writes `results/evaluation/02_validation_gemini_v2.csv`.
+Every versioned row records `prompt_version`. Running the same combination
+again replaces its previous result. The files are git-ignored runtime artefacts;
 run the evaluation yourself after cloning.
 
 ### Design decisions
 
-**Gemini failures are recorded, not hidden.** If a call times out or returns
+**Provider failures.** If a call times out or returns
 an unusable answer, the ticket gets the category `FEHLER`, the reason goes
 into the `error` column, and it counts as wrong. The run continues with the
 remaining tickets.
@@ -126,16 +127,10 @@ which is right for serving traffic. For a *measurement* it would be wrong: the
 result would be a mixture of two classifiers and no longer tell us what we
 measured.
 
-**The environment is read directly.** `evaluate.py` parses `backend/.env`
-itself and accepts only `GEMINI_API_KEY`, `GEMINI_MODEL`,
-`LLM_TIMEOUT_SECONDS` and `LLM_CATEGORIES`. Importing `backend/app.py` would
-start Flask and create a SQLite file as an import side effect.
-
-**The API key is read from the backend's `.env` and used only for the
-request.** It is passed to the Gemini endpoint as the `x-goog-api-key`
-header, and is never logged, printed, written to a result file or included in
-an error message. `backend/.env` is git-ignored. Only Bitext ticket texts are
-sent to Google — a public dataset under CDLA-Sharing-1.0, no customer data.
+`evaluate.py` reads an allowlist of provider keys, models, categories, and
+timeout settings. Process environment variables take precedence over
+`backend/.env`. The selected provider key is used only in its request header.
+Evaluation sends Bitext dataset texts to the selected provider.
 
 ## Dashboard
 
@@ -158,17 +153,15 @@ Two notes for whoever works on it next:
 
 ## Prompt versions V1–V3
 
-The dashboard reserves columns for three prompt variants. They are empty on
-purpose — no placeholder numbers are ever shown.
-
-They cannot be filled yet: `classify_with_gemini` builds its system prompt
-inside the function (`backend/llm_classifier.py:54-66`) and takes no prompt
-argument, so only one prompt can be measured. How to enable this is still to
-be agreed in the team.
+`evaluation/prompts.py` is the shared source for both adapters. V1 is the
+backend default. V2 and V3 initially use the same wording as V1, so they only
+become distinct experiments after you edit their templates. The configured
+category list is inserted when the prompt is rendered. The dashboard shows
+metrics after a run produces a result CSV.
 
 ## Open points
 
 - Five of the nine dataset labels have no category in the classifier
   (CONTACT, DELIVERY, FEEDBACK, INVOICE, REFUND). A ticket is with the
   backend owner.
-- Prompt variants V1–V3, once a prompt can be passed in
+- Define distinct V2 and V3 experiments and measure them on the validation split.

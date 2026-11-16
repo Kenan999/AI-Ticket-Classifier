@@ -62,9 +62,8 @@ COLOR_MACRO_F1 = "#eb6834"
 TARGET_ACCURACY = 0.90
 TARGET_MACRO_F1 = 0.85
 
-# Prompt-Versionen. V0 ist die Keyword-Baseline, V1-V3 sind spaetere
-# Prompt-Varianten. "path" bleibt None, solange nichts gemessen wurde -
-# dann steht in Tabelle und Diagramm nichts, niemals erfundene Zahlen.
+# Die Tabelle zeigt nur gemessene Kennzahlen. Versionierte Methoden
+# werden aus derselben Liste wie die Auswahl in der Seitenleiste erzeugt.
 VERSIONS = [
     {
         "key": "V0",
@@ -80,44 +79,26 @@ VERSIONS = [
     },
     {
         "key": "GEMINI",
-        "short": "Gemini · bestehend",
+        "short": "Gemini · Standard",
         "provider": GEMINI,
         "tint": "#fdf6e6",
         "ink": "#8a6100",
-        "approach": "Gemini, Prompt aus dem Backend",
-        "prompt": (
-            "Bestehender System-Prompt aus "
-            "backend/llm_classifier.py – unverändert übernommen, "
-            "nicht von der Evaluation geschrieben."
-        ),
+        "approach": "Gemini mit der Backend-Standardversion",
+        "prompt": "Die Standardversion ist in evaluation/prompts.py festgelegt.",
     },
-    {
-        "key": "V1",
-        "short": "Prompt V1",
-        "provider": None,
-        "tint": "#fdf0ea",
-        "ink": "#a8451c",
-        "approach": "Gemini",
-        "prompt": None,
-    },
-    {
-        "key": "V2",
-        "short": "Prompt V2",
-        "provider": None,
-        "tint": "#e9f7f1",
-        "ink": "#107954",
-        "approach": "Gemini",
-        "prompt": None,
-    },
-    {
-        "key": "V3",
-        "short": "Prompt V3",
-        "provider": None,
-        "tint": "#efedfb",
-        "ink": "#4a3bb0",
-        "approach": "Gemini",
-        "prompt": None,
-    },
+    *(
+        {
+            "key": key,
+            "short": method["label"],
+            "provider": key,
+            "tint": "#fdf0ea" if method["provider"] == GEMINI else "#f0eefc",
+            "ink": "#a8451c" if method["provider"] == GEMINI else "#5541a6",
+            "approach": "Versionierter System-Prompt",
+            "prompt": "Prompt-Text in evaluation/prompts.py.",
+        }
+        for key, method in PROVIDERS.items()
+        if key not in {BASELINE, GEMINI}
+    ),
 ]
 
 TABLE_STYLE = """
@@ -220,6 +201,7 @@ def load_results(path):
             "predicted": row["predicted"],
             "confidence": row["confidence"],
             "model_version": row["model_version"],
+            "prompt_version": row.get("prompt_version"),
             "correct": row["expected"] == row["predicted"],
         })
     return results
@@ -268,8 +250,8 @@ def render_sidebar():
             options=list(PROVIDERS),
             format_func=lambda key: PROVIDERS[key]["label"],
             help=(
-                "Regeln laufen offline. Gemini schickt die Tickets an "
-                "Google und braucht einen Key in backend/.env."
+                "Regeln laufen offline. Gemini und OpenAI senden Tickets "
+                "an den gewählten Anbieter und benötigen einen API-Key."
             ),
         )
         # st.radio statt selectbox: nur das Radio kann eine zweite,
