@@ -49,6 +49,20 @@ const classifiedList = document.getElementById("classified-list");
 const reviewList = document.getElementById("review-list");
 const backendStatus = document.getElementById("backend-status");
 const reloadButton = document.getElementById("reload-button");
+
+const evaluationLink = document.getElementById("evaluation-monitoring-link");
+const evaluationUrl = window.APP_CONFIG?.evaluationUrl;
+if (evaluationUrl) {
+  try {
+    const url = new URL(evaluationUrl, window.location.href);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      evaluationLink.href = url.href;
+      evaluationLink.hidden = false;
+    }
+  } catch {
+    // Leave the link hidden when the dashboard address is invalid.
+  }
+}
 const submitButton = form.querySelector("button[type=submit]");
 const submitLabel = submitButton.textContent;
 

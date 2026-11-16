@@ -307,6 +307,12 @@ button:hover {
   font-size: 0.75rem;
 }
 
+.evaluation-link {
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
 .reload-btn:hover {
   background: var(--dark-soft);
 }

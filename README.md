@@ -4,6 +4,10 @@ The frontend source on this branch is in `public/`.
 
 The Human Review correction menu submits the backend's nine Bitext labels.
 
+Set `evaluationUrl` in the environment's `runtime-config.js` to enable
+**AI Operations** next to **Reload** in the support dashboard.
+The link opens the evaluation dashboard. The local preview uses `http://127.0.0.1:8502/`.
+
 ## Downloaded development starter
 
 When using the shared backend during frontend development, keep the downloaded
