@@ -58,7 +58,12 @@ new fields. `baseline` means local keyword rules, not a local LLM.
 For a future frontend selector, fetch `GET /providers`, display the labels, and
 send the selected ID in each `POST /classify`. `configured` only indicates that
 a key is present, not that it is valid or the service is reachable. Keep API keys
-and model settings on the server. This contract is implemented only in the
+and model settings on the server. Only `text` and optional `provider` are
+accepted in classification requests; other fields return HTTP 400
+(`unsupported_fields`). The deployment owner controls model names, credentials,
+timeout and categories through the server environment. There is no API to change
+these settings or prompts. See the [model and prompt reference](docs/llm_integration.md).
+This contract is implemented only in the
 backend development copy: frontend controls and deployment gateway routing for
 `/providers` still need separate integration before public use.
 The automated tests simulate cloud responses and do not validate live API access.

@@ -117,6 +117,35 @@ class ProviderSelectionTests(unittest.TestCase):
         result = self.app.test_client().post('/classify', json={'text': 'Where is my parcel?'}).json
         self.assertEqual(result['provider'], 'openai')
 
+    def test_client_cannot_override_server_configuration(self):
+        for field in ('model', 'api_key', 'OPENAI_MODEL', 'GEMINI_MODEL',
+                      'OPENAI_API_KEY', 'GEMINI_API_KEY', 'timeout',
+                      'categories', 'prompt', 'settings'):
+            with self.subTest(field=field):
+                response = self.send(provider='openai', **{field: 'client-value'})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.json['error']['code'], 'unsupported_fields')
+                self.assertNotIn('client-value', response.get_data(as_text=True))
+        self.openai.assert_not_called(); self.gemini.assert_not_called()
+        self.assertEqual(self.client.get('/cases').json, [])
+
+    def test_cloud_adapters_receive_only_server_settings(self):
+        for provider, adapter, key_name, model_name in (
+            ('openai', self.openai, 'OPENAI_API_KEY', 'OPENAI_MODEL'),
+            ('gemini', self.gemini, 'GEMINI_API_KEY', 'GEMINI_MODEL'),
+        ):
+            with self.subTest(provider=provider), patch.dict(os.environ, {
+                key_name: 'server-secret', model_name: 'server-model',
+                'LLM_TIMEOUT_SECONDS': '12', 'LLM_CATEGORIES': 'Shipping,Billing',
+            }):
+                response = self.send(provider=provider)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(adapter.call_args.kwargs, {
+                    'api_key': 'server-secret', 'model': 'server-model',
+                    'timeout': 12.0, 'categories': ('Shipping', 'Billing'),
+                })
+                self.assertNotIn('server-secret', response.get_data(as_text=True))
+
     def test_invalid_server_default_matches_baseline_behavior(self):
         with patch.dict(os.environ, {'LLM_PROVIDER': 'unknown'}):
             self.assertEqual(self.client.get('/providers').json['default_provider'], 'baseline')

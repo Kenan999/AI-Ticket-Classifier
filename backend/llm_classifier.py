@@ -1,7 +1,7 @@
 """Optional Gemini REST adapter for a user-configurable set of support categories.
 
 The API key stays on the backend. Customer text is sent to Gemini ONLY when
-LLM_PROVIDER=gemini and GEMINI_API_KEY is configured. No network calls at import.
+Gemini is selected by the request or server default and a server key is configured. No network calls at import.
 """
 import json
 import os

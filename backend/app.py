@@ -114,6 +114,9 @@ def create_app(review_path=None, case_db_path=None):
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return error("invalid_json", "Send a JSON object with a text field")
+        # Clients choose a provider, never server models, credentials or prompts.
+        if set(data) - {"text", "provider"}:
+            return error("unsupported_fields", "Only text and provider fields are accepted")
         text = data.get("text")
         if not isinstance(text, str) or not text.strip():
             return error("invalid_text", "text must be a non-empty string")
