@@ -8,8 +8,6 @@ It is a local development service, not a public/authenticated deployment.
 """
 
 import os
-import json
-import sqlite3
 from pathlib import Path
 import threading
 import uuid
@@ -17,12 +15,14 @@ import uuid
 from flask import Flask, jsonify, request
 
 try:
+    from . import case_storage
     from .classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from .review import ReviewError, save_review
     from .config import openai_api_key
     from .openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
     from .llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 except ImportError:  # Supports direct execution: python3 backend/app.py
+    import case_storage
     from classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
     from review import ReviewError, save_review
     from config import openai_api_key
@@ -50,22 +50,13 @@ def create_app(review_path=None, case_db_path=None):
     case_db.parent.mkdir(parents=True, exist_ok=True)
     lock = threading.RLock()
 
-    def connect_cases():
-        connection = sqlite3.connect(case_db, timeout=15)
-        connection.execute("CREATE TABLE IF NOT EXISTS cases (ticket_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
-        return connection
-
-    with connect_cases() as connection:
-        pass
+    case_storage.initialize(case_db)
 
     def load_case(ticket_id):
-        with connect_cases() as connection:
-            row = connection.execute("SELECT payload FROM cases WHERE ticket_id=?", (ticket_id,)).fetchone()
-        return json.loads(row[0]) if row else None
+        return case_storage.load(case_db, ticket_id)
 
     def store_case(case):
-        with connect_cases() as connection:
-            connection.execute("INSERT OR REPLACE INTO cases(ticket_id,payload) VALUES (?,?)", (case["ticket_id"], json.dumps(case)))
+        case_storage.store(case_db, case)
 
     origins = {
         origin.strip()
@@ -180,13 +171,18 @@ def create_app(review_path=None, case_db_path=None):
 
     @app.get("/cases")
     def cases_list():
-        """Return all persisted cases for the support dashboard, newest first."""
+        """Return cases by creation time; legacy cases with unknown dates come last."""
+        allowed = {"status", "category"}
+        if set(request.args) - allowed or any(len(request.args.getlist(k)) != 1 for k in request.args):
+            return error("invalid_filter", "Use one status and/or category filter")
+        status, category = request.args.get("status"), request.args.get("category")
+        if status is not None and status not in {"classified", "human_review", "reviewed"}:
+            return error("invalid_filter", "Unknown status")
+        if category is not None and (not category.strip() or len(category) > 120):
+            return error("invalid_filter", "category must be a non-empty value up to 120 characters")
         with lock:
-            with connect_cases() as connection:
-                rows = connection.execute(
-                    "SELECT payload FROM cases ORDER BY rowid DESC"
-                ).fetchall()
-        return jsonify([json.loads(row[0]) for row in rows])
+            cases = case_storage.list_cases(case_db, status=status, category=category)
+        return jsonify(cases)
 
     @app.get("/case/<ticket_id>")
     def case_detail(ticket_id):

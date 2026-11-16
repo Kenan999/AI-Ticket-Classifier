@@ -102,3 +102,40 @@ use shared live cases, including review changes. Use fictional messages.
 Stop with Control-C. If the token expires, create another and restart.
 If the port is busy, choose another with `--port`; the API address follows it.
 Do not commit the downloaded starter or access tokens.
+
+## Case timestamps, database metadata and filters
+
+The development backend adds `created_at`, `updated_at`, `category`, `status`
+and `confidence` columns to the existing SQLite `cases` table. On startup,
+the migration runs transactionally and can be repeated. Existing JSON payloads
+and ticket IDs are preserved; category/status/confidence are extracted from them.
+Invalid legacy JSON aborts and rolls back the migration rather than deleting data.
+Before deploying this migration, take a consistent SQLite backup. No deployment
+or production migration is performed by this source change.
+
+New cases receive UTC ISO-8601 timestamps. Reviews preserve `created_at`, update
+`updated_at` and synchronize category/status columns with the JSON payload.
+Legacy cases have unknown timestamps (`null` in API responses); reviewing one
+sets only its update time. Historical creation dates are never invented.
+
+`GET /cases` still returns a JSON array, now ordered by creation time descending.
+Legacy cases with unknown dates come last, ordered by their existing row IDs.
+Equal creation times use row IDs as a stable tie-breaker. Review updates no longer
+replace database rows or reorder them by creation time.
+
+Optional exact-match filters can be combined:
+
+```text
+GET /cases?status=reviewed&category=Technical
+```
+
+Statuses are `classified`, `human_review` or `reviewed`. Categories match exactly;
+unmatched categories return an empty list. Empty categories, repeated parameters
+and unsupported parameters return 400. Filters use SQL parameters; category,
+status and creation time have indexes. Detail, list and classify responses expose
+both timestamps. The review response keeps its existing contract; reload the case
+to obtain its updated timestamps.
+
+These filters are implemented in the development API only. The deployed gateway
+and downloaded local-testing proxy currently reject query parameters and have not
+been changed. No frontend controls or production changes are included here.
