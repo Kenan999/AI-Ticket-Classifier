@@ -15,9 +15,8 @@ as a deployment step, **not** on each API request. `data/` stays outside Git.
 Preparation excludes CANCEL and SUBSCRIPTION, removes template placeholders,
 then deduplicates messages before splitting. The result contains nine dataset
 labels: 18,291 training messages, 1,800 validation messages and 1,800 test
-messages (200 per label in each evaluation split). These dataset labels do not
-replace the app's seven categories. Map the label sets explicitly before
-comparing app predictions against this dataset. See
+messages (200 per label in each evaluation split). Baseline, Gemini, and
+OpenAI all use the same nine dataset labels. See
 [dataset preparation details](docs/dataset_comparison.md).
 
 ## Local setup
@@ -52,10 +51,10 @@ imports the backend directly — no API, database or frontend — and never
 modifies backend files or the dataset. Run `python backend/prepare_data.py`
 first; the evaluation reads `data/processed/` and nothing else.
 
-The **dataset labels are the ground truth**. The classifier answers in the
-app's own categories, so its answer is translated to a dataset label before
-comparison. Categories with no dataset label — currently Returns, Technical
-and General — can never match and are counted as wrong.
+The **dataset labels are the ground truth**. Predictions use the exact
+Bitext labels. Existing cases keep their saved categories, and legacy labels
+without an exact match have no dataset label. Correct a legacy case to one
+of the nine labels when submitting a new human review.
 
 Three modes, each drawing a fixed sample with `random_state=42`, so every run
 and every machine measures exactly the same tickets:
@@ -89,11 +88,9 @@ before opening the dashboard. A provider call that fails is recorded as an error
 and counted as wrong; it does **not** fall back to the rule baseline, because a
 mixed result would not be measurable.
 
-Current scores for the rule baseline are around **0.31 accuracy** and
-**0.30 macro-F1** across all three modes. Five of the nine dataset labels have
-no counterpart in the classifier, which accounts for most of the gap. See
-[evaluation details](docs/evaluation.md) for the method, the metrics and the
-open points.
+Generate new results after switching to the nine-label classifier so
+comparisons use the same taxonomy. See [evaluation details](docs/evaluation.md)
+for the method and metrics.
 
 ## Tests
 
@@ -189,7 +186,7 @@ replace database rows or reorder them by creation time.
 Optional exact-match filters can be combined:
 
 ```text
-GET /cases?status=reviewed&category=Technical
+GET /cases?status=reviewed&category=CONTACT
 ```
 
 Statuses are `classified`, `human_review` or `reviewed`. Categories match exactly;

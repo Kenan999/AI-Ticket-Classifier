@@ -158,7 +158,7 @@ Bewusst noch offen – hier gesammelt, damit nichts verloren geht:
   Das Backend hat dafür schon eine Schwelle (`REVIEW_THRESHOLD = 0.75`).
   Das ist die eigentliche Management-Kennzahl.
 - **Klartext-Fazit** – ein Satz statt einer Tabelle, zum Beispiel
-  "V3 ist besser als V2, Hauptschwäche bleibt Returns".
+  "V3 ist besser als V2, Hauptschwäche bleibt REFUND".
 - **Kosten pro Durchlauf** – bei Gemini: wie viel kostet eine Messung?
 - **Getrennte Ansichten** – eine kompakte Management-Sicht und eine
   ausführliche Entwickler-Sicht auf derselben Seite.

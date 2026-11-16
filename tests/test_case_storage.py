@@ -46,16 +46,16 @@ class CaseMetadataTests(unittest.TestCase):
         self.assertTrue(first['created_at'].endswith('Z'))
         self.assertEqual(first['created_at'],first['updated_at'])
         response=c.post('/review',json={'ticket_id':first['ticket_id'],'decision':'correct',
-            'reviewer':'Test','final_category':'Technical','customer_reply':'We will help with your technical issue.'})
+            'reviewer':'Test','final_category':'CONTACT','customer_reply':'We will help with your technical issue.'})
         self.assertEqual(response.status_code,200,response.get_json())
         changed=c.get('/case/'+first['ticket_id']).get_json()
         self.assertEqual(changed['created_at'],first['created_at'])
         self.assertGreater(changed['updated_at'],first['updated_at'])
         self.assertEqual([x['ticket_id'] for x in c.get('/cases').get_json()],[second['ticket_id'],first['ticket_id']])
-        self.assertEqual(c.get('/cases?status=reviewed&category=Technical').get_json(),[changed])
-        self.assertEqual(c.get('/cases?category=Shipping').get_json(),[])
+        self.assertEqual(c.get('/cases?status=reviewed&category=CONTACT').get_json(),[changed])
+        self.assertEqual(c.get('/cases?category=DELIVERY').get_json(),[])
         with sqlite3.connect(self.db) as db:
-            self.assertEqual(db.execute('SELECT category,status FROM cases WHERE ticket_id=?',(first['ticket_id'],)).fetchone(),('Technical','reviewed'))
+            self.assertEqual(db.execute('SELECT category,status FROM cases WHERE ticket_id=?',(first['ticket_id'],)).fetchone(),('CONTACT','reviewed'))
         self.assertEqual(self.client().get('/case/'+first['ticket_id']).get_json(),changed)
 
     def test_filters_are_validated_and_parameterized(self):

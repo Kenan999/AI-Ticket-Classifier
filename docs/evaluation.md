@@ -26,29 +26,10 @@ reads them.
 
 ### Ground truth
 
-**The dataset labels are the reference, not the classifier's categories.**
-The app answers in its own seven categories, so each answer is translated to a
-dataset label before it is compared:
-
-| App category | Dataset label |
-|---|---|
-| Shipping | SHIPPING |
-| Billing | PAYMENT |
-| Account | ACCOUNT |
-| Orders | ORDER |
-| Returns, Technical, General | *none* |
-
-The translation is read from `dataset_label_for` in `backend/classifier.py`,
-not maintained here, so it follows the backend automatically.
-
-An answer with no dataset label can never match and is counted as wrong. Those
-answers get no row of their own in the per-label table: macro-F1 is averaged
-over the nine real labels, never over invented ones.
-
-Five of the nine labels — CONTACT, DELIVERY, FEEDBACK, INVOICE, REFUND — have
-no category at all, so every ticket carrying them is wrong by construction.
-That is a real finding about coverage, not a measurement error, and it is
-stated on the dashboard.
+The dataset and classifier use the same nine labels. The evaluation reads
+them through `dataset_label_for` in `backend/classifier.py`. A historical or
+invalid prediction without an exact dataset label counts as wrong. Macro-F1
+averages over the labels in the ground truth.
 
 ### Modes
 
@@ -156,12 +137,10 @@ Two notes for whoever works on it next:
 `evaluation/prompts.py` is the shared source for both adapters. V1 is the
 backend default. V2 and V3 initially use the same wording as V1, so they only
 become distinct experiments after you edit their templates. The configured
-category list is inserted when the prompt is rendered. The dashboard shows
-metrics after a run produces a result CSV.
+nine-label list and shared category guidance from `backend/classifier.py`
+are inserted when the prompt is rendered. The dashboard shows metrics after
+a run produces a result CSV.
 
 ## Open points
 
-- Five of the nine dataset labels have no category in the classifier
-  (CONTACT, DELIVERY, FEEDBACK, INVOICE, REFUND). A ticket is with the
-  backend owner.
 - Define distinct V2 and V3 experiments and measure them on the validation split.

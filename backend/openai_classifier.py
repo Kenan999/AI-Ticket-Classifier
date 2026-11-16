@@ -5,10 +5,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 try:
-    from .classifier import PredictionResult
+    from .classifier import CATEGORY_GUIDANCE, PredictionResult
     from .llm_classifier import LLMError, configured_categories
 except ImportError:
-    from classifier import PredictionResult
+    from classifier import CATEGORY_GUIDANCE, PredictionResult
     from llm_classifier import LLMError, configured_categories
 
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
@@ -26,7 +26,9 @@ def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODE
     if not 1 <= float(timeout) <= 20:
         raise LLMError("LLM timeout must be 1–20 seconds")
     categories = configured_categories(",".join(categories))
-    instructions = render_prompt(prompt_version, "openai", categories)
+    instructions = render_prompt(
+        prompt_version, "openai", categories, category_guidance=CATEGORY_GUIDANCE,
+    )
     payload = {
         "model": model,
         "temperature": 0,

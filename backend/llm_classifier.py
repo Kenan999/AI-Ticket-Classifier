@@ -11,19 +11,17 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 try:
-    from .classifier import PredictionResult
+    from .classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 except ImportError:  # direct execution: python3 backend/app.py
     import sys
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from classifier import PredictionResult
+    from classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
-DEFAULT_CATEGORIES = (
-    "Returns", "Shipping", "Billing", "Account", "Technical", "Orders", "General",
-)
+DEFAULT_CATEGORIES = DATASET_CATEGORIES
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
 MAX_RESPONSE_BYTES = 32 * 1024
 
@@ -33,15 +31,19 @@ class LLMError(Exception):
 
 
 def configured_categories(raw=None):
-    """Read the set of labels without changing the existing frontend contract."""
+    """Use exactly the nine dataset labels; reject stale deployment overrides."""
     if raw is None:
         raw = os.getenv("LLM_CATEGORIES", "")
-    values = [item.strip() for item in raw.split(",")] if raw.strip() else list(DEFAULT_CATEGORIES)
-    if (not 2 <= len(values) <= 30
-            or any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9 _-]{0,39}", value) for value in values)
-            or len(set(values)) != len(values)):
-        raise ValueError("LLM_CATEGORIES must contain 2–30 distinct simple labels")
-    return tuple(values)
+    if not isinstance(raw, str):
+        raise ValueError("LLM_CATEGORIES must be a string")
+    if not raw.strip():
+        return DEFAULT_CATEGORIES
+    values = tuple(item.strip() for item in raw.split(","))
+    if (len(values) != len(DEFAULT_CATEGORIES)
+            or len(set(values)) != len(DEFAULT_CATEGORIES)
+            or set(values) != set(DEFAULT_CATEGORIES)):
+        raise ValueError("LLM_CATEGORIES must contain exactly the nine Bitext labels")
+    return DEFAULT_CATEGORIES
 
 
 def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
@@ -57,7 +59,9 @@ def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
     if not 1 <= float(timeout) <= 20:
         raise LLMError("LLM timeout must be 1–20 seconds")
     categories = configured_categories(",".join(categories))
-    instructions = render_prompt(prompt_version, "gemini", categories)
+    instructions = render_prompt(
+        prompt_version, "gemini", categories, category_guidance=CATEGORY_GUIDANCE,
+    )
     payload = {
         "systemInstruction": {"parts": [{"text": instructions}]},
         "contents": [{"role": "user", "parts": [{"text": json.dumps({"ticket": text})}]}],

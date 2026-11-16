@@ -175,8 +175,7 @@ def category_to_label():
 def to_dataset_label(category, mapping=None):
     """Antwort des Klassifikators als Datensatz-Label.
 
-    Kategorien ohne Label - heute Returns, Technical und General -
-    bekommen ihren Namen in Klammern. So ist in der Auswertung
+    Ausgaben ohne gueltiges Datensatz-Label bekommen ihren Namen in Klammern. So ist in der Auswertung
     sichtbar, was der Klassifikator wirklich geantwortet hat, und es
     zaehlt zugleich als falsch, weil es kein Label des Datensatzes ist.
     """
@@ -328,9 +327,8 @@ def per_category_scores(results):
     FN: gehoert hierher, wurde aber anders einsortiert.
 
     Gewertet werden nur Kategorien, die in der Ground Truth vorkommen.
-    Antwortet der Klassifikator etwas, das es dort nicht gibt - heute
-    General und Returns -, zaehlt das als Fehler bei der erwarteten
-    Kategorie, bekommt aber keine eigene Zeile. Sonst wuerde der
+    Eine Antwort ohne gueltiges Datensatz-Label zaehlt als Fehler
+    bei der erwarteten Kategorie und bekommt keine eigene Zeile. Sonst wuerde der
     Macro-F1 ueber erfundene Klassen gemittelt.
     """
     categories = {result["expected"] for result in results}

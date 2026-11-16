@@ -1,4 +1,6 @@
 """Provider selection contract, with temporary storage and no network calls."""
+import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -6,8 +8,9 @@ import unittest
 from unittest.mock import patch
 
 from backend.app import create_app
-from backend.classifier import PredictionResult
+from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 from backend.llm_classifier import LLMError
+from evaluation import evaluate
 
 
 class ProviderSelectionTests(unittest.TestCase):
@@ -25,9 +28,9 @@ class ProviderSelectionTests(unittest.TestCase):
         self.app.config['TESTING'] = True
         self.client = self.app.test_client()
         self.openai_patch = patch('backend.app.classify_with_openai', return_value=
-                                 PredictionResult('Shipping', .9, 'openai:gpt-4.1-mini'))
+                                 PredictionResult('DELIVERY', .9, 'openai:gpt-4.1-mini'))
         self.gemini_patch = patch('backend.app.classify_with_gemini', return_value=
-                                 PredictionResult('Shipping', .9, 'gemini:gemini-3.1-flash-lite'))
+                                 PredictionResult('DELIVERY', .9, 'gemini:gemini-3.1-flash-lite'))
         self.openai = self.openai_patch.start(); self.addCleanup(self.openai_patch.stop)
         self.gemini = self.gemini_patch.start(); self.addCleanup(self.gemini_patch.stop)
 
@@ -136,13 +139,14 @@ class ProviderSelectionTests(unittest.TestCase):
         ):
             with self.subTest(provider=provider), patch.dict(os.environ, {
                 key_name: 'server-secret', model_name: 'server-model',
-                'LLM_TIMEOUT_SECONDS': '12', 'LLM_CATEGORIES': 'Shipping,Billing',
+                'LLM_TIMEOUT_SECONDS': '12',
+                'LLM_CATEGORIES': ','.join(reversed(DATASET_CATEGORIES)),
             }):
                 response = self.send(provider=provider)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(adapter.call_args.kwargs, {
                     'api_key': 'server-secret', 'model': 'server-model',
-                    'timeout': 12.0, 'categories': ('Shipping', 'Billing'),
+                    'timeout': 12.0, 'categories': DATASET_CATEGORIES,
                 })
                 self.assertNotIn('server-secret', response.get_data(as_text=True))
 
@@ -151,6 +155,42 @@ class ProviderSelectionTests(unittest.TestCase):
             self.assertEqual(self.client.get('/providers').json['default_provider'], 'baseline')
             self.assertEqual(self.send().json['provider'], 'baseline')
         self.openai.assert_not_called(); self.gemini.assert_not_called()
+
+
+class VersionedEvaluationTests(unittest.TestCase):
+    def test_every_provider_and_version_uses_the_nine_label_prompt(self):
+        category = "DELIVERY"
+        response = json.dumps({"category": category, "confidence": 0.91})
+        ticket = {"ticket_id": "fixture", "text": "Where is my parcel?", "expected": category}
+        providers = {
+            "gemini": (
+                "backend.llm_classifier.urlopen",
+                {"candidates": [{"content": {"parts": [{"text": response}]}}]},
+            ),
+            "openai": (
+                "backend.openai_classifier.urlopen",
+                {"choices": [{"message": {"content": response}}]},
+            ),
+        }
+        for provider, (urlopen, payload) in providers.items():
+            for version in ("V1", "V2", "V3"):
+                with self.subTest(provider=provider, version=version):
+                    with patch.object(
+                        evaluate, "load_env", return_value={f"{provider.upper()}_API_KEY": "test"},
+                    ), patch(urlopen, return_value=io.BytesIO(json.dumps(payload).encode())) as send:
+                        rows = evaluate.run_evaluation([ticket], provider=f"{provider}-{version.lower()}")
+
+                    send.assert_called_once()
+                    request = json.loads(send.call_args.args[0].data)
+                    if provider == "gemini":
+                        instructions = request["systemInstruction"]["parts"][0]["text"]
+                    else:
+                        instructions = request["messages"][0]["content"]
+                    self.assertIn(json.dumps(DATASET_CATEGORIES), instructions)
+                    self.assertEqual(instructions.count(CATEGORY_GUIDANCE), 1)
+                    self.assertEqual(rows[0]["prompt_version"], version)
+                    self.assertEqual(rows[0]["predicted"], category)
+                    self.assertTrue(rows[0]["correct"])
 
 
 if __name__ == '__main__':

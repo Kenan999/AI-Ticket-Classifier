@@ -35,10 +35,13 @@ PROMPTS = {
 }
 
 
-def render_prompt(version, provider, categories):
-    """Render a registered prompt for the provider and its allowed labels."""
+def render_prompt(version, provider, categories, *, category_guidance):
+    """Render a registered prompt with the allowed labels and their meanings."""
     try:
         template = PROMPTS[version][provider]
     except KeyError as exc:
         raise ValueError(f"No {version} prompt is defined for {provider}.") from exc
-    return template.replace("{categories}", json.dumps(categories))
+    return (
+        template.replace("{categories}", json.dumps(categories))
+        + " " + category_guidance
+    )

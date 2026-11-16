@@ -14,7 +14,7 @@ from backend.llm_classifier import LLMError
 from backend.openai_classifier import classify_with_openai, MAX_RESPONSE_BYTES
 
 
-def response(category="Account", confidence=.91):
+def response(category="ACCOUNT", confidence=.91):
     return io.BytesIO(json.dumps({"choices": [{"message": {"content":
         json.dumps({"category": category, "confidence": confidence})}}]}).encode())
 
@@ -51,7 +51,7 @@ class OpenAIIntegrationTests(unittest.TestCase):
             result = self.classify()
         request.assert_called_once()
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json["category"], "Account")
+        self.assertEqual(result.json["category"], "ACCOUNT")
         self.assertEqual(result.json["model_version"], "openai:gpt-4.1-mini")
         self.assertFalse(result.json["reply_confirmed"])
         self.assertNotIn("test-placeholder", result.get_data(as_text=True))
@@ -77,13 +77,13 @@ class OpenAIIntegrationTests(unittest.TestCase):
             with self.assertLogs(self.app.logger, level="WARNING") as logs:
                 result = self.classify()
         self.assertEqual(result.status_code, 200)
-        self.assertEqual(result.json["category"], "Shipping")
+        self.assertEqual(result.json["category"], "DELIVERY")
         self.assertEqual(result.json["model_version"], MODEL_VERSION)
         self.assertNotIn("test-placeholder", " ".join(logs.output))
 
     def test_bad_provider_output_falls_back(self):
-        for category, confidence in [("Unknown", .9), ("Account", True),
-                                     ("Account", -1), ("Account", 2), ("Account", "high")]:
+        for category, confidence in [("Unknown", .9), ("ACCOUNT", True),
+                                     ("ACCOUNT", -1), ("ACCOUNT", 2), ("ACCOUNT", "high")]:
             with self.subTest(category=category, confidence=confidence):
                 with patch("backend.openai_classifier.urlopen", return_value=response(category, confidence)):
                     result = self.classify()
