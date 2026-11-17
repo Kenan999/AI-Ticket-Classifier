@@ -126,7 +126,7 @@ def request_batch(items, *, provider, model, api_key, prompt, categories,
 
 def run(tickets, method, env, pause, progress=None):
     provider = method["provider"]
-    default = "gpt-4.1-mini" if provider == "openai" else "gemini-3.1-flash-lite"
+    default = "gpt-4.1-mini" if provider == "openai" else "gemini-3.5-flash-lite"
     model = env.get(provider.upper() + "_MODEL", default)
     limits = MODEL_LIMITS.get((provider, model))
     if limits is None:

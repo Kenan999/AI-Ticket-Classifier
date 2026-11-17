@@ -277,6 +277,11 @@ def render_sidebar():
             if engine == BASELINE:
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
         provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
+        if engine != BASELINE:
+            from evaluation.evaluate import load_env
+            from backend.llm_classifier import DEFAULT_MODEL
+            active_model = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else "gpt-4.1-mini")
+            st.caption(f"Modell für neue Tests: {active_model}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
                     key="batch_evaluation", disabled=engine == BASELINE)
         if engine != BASELINE and st.session_state.get("batch_evaluation", True):

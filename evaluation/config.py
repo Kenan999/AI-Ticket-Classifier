@@ -12,10 +12,11 @@ class ModelLimits:
 
 # Official model documentation, checked November 2026:
 # https://developers.openai.com/api/docs/models/gpt-4.1-mini
-# https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite
+# https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
 MODEL_LIMITS = {
+    ("gemini", "gemini-3.5-flash-lite"): ModelLimits(1048576, 65536),
+
     ("openai", "gpt-4.1-mini"): ModelLimits(1047576, 32768),
-    ("gemini", "gemini-3.1-flash-lite"): ModelLimits(1048576, 65536),
 }
 
 # Evaluation may wait longer than interactive application requests.
