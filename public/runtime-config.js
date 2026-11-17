@@ -1,4 +1,3 @@
-// Normal startup uses the existing backend address.
+// Optional overrides for nonstandard setups; defaults work locally and on the server.
 // The downloaded testing starter serves its own version without changing this file.
-// Set evaluationUrl to show the support dashboard's AI Operations link.
 window.APP_CONFIG = Object.freeze({});

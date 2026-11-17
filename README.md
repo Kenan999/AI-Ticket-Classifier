@@ -4,9 +4,12 @@ The frontend source on this branch is in `public/`.
 
 The Human Review correction menu submits the backend's nine Bitext labels.
 
-Set `evaluationUrl` in the environment's `runtime-config.js` to enable
-**AI Operations** next to **Reload** in the support dashboard.
-The link opens the evaluation dashboard. The local preview uses `http://127.0.0.1:8502/`.
+**AI Operations** next to **Reload** opens the evaluation dashboard.
+On localhost or 127.0.0.1 it uses http://127.0.0.1:8501; deployed sites use
+/evaluation/ on the same site. Start the local evaluation service from a checkout
+that contains the backend/evaluation code. No configuration edit is needed.
+Optional `evaluationUrl` overrides support custom addresses; an empty string hides
+the link. The downloaded starter still supplies runtime configuration dynamically.
 
 ## Downloaded development starter
 
