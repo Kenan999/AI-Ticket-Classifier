@@ -331,3 +331,8 @@ operation guide for the backend; detailed topic documentation lives in
 `backend/data/` groups download, CSV loading, preprocessing and setup orchestration.
 The loader reads raw or processed CSV files and returns `ticket_id`, `text`, and
 `label`; it does not download data. Runtime datasets remain under root `data/`.
+
+Ticket review and storage live in `backend/tickets/`. Manual checks live in
+`backend/scripts/`. The API-key environment reader lives in `backend/llms/config.py`;
+keys themselves are never stored in source. `backend/app.py` remains the API entry
+point, and `backend/classifier.py` contains the keyword baseline and category definitions.

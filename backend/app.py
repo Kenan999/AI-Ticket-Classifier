@@ -18,10 +18,10 @@ if __package__ in (None, ""):
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend import case_storage
+from backend.tickets import case_storage
 from backend.classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
-from backend.review import ReviewError, save_review
-from backend.config import openai_api_key
+from backend.tickets.review import ReviewError, save_review
+from backend.llms.config import openai_api_key
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 

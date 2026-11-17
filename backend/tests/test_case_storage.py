@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from backend.app import create_app
-from backend import case_storage
+from backend.tickets import case_storage
 
 
 class CaseMetadataTests(unittest.TestCase):
