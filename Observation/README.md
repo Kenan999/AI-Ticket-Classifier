@@ -57,3 +57,8 @@ Alte Einträge ohne Kennung werden ebenfalls einzeln angezeigt.
 Das Dashboard zeigt aufklappbare Läufe und darunter eingerückte, aufklappbare
 Anfragen. Anbieter- und Quellenfilter schränken die angezeigten Anfragen ein.
 Die Integration der Aufrufer steht weiterhin aus.
+
+
+## Request details and cost estimates
+The standalone test records endpoint, HTTP status, safe response headers (request IDs, rate-limit values and retry-after), request/response byte sizes, configured timeout, duration, attempts and retries. Raw provider responses preserve usage, finish reasons and safety information when supplied. No authorization or cookie headers are captured.
+Token usage and estimated USD standard-price cost appear per request and as a partial run sum with coverage. Rates and their source/date live in config.json; a price snapshot is saved with each new response. These are not invoices: free tiers, discounts and special tool/storage charges are not inferred. Unknown model prices or absent usage stay unknown, including failed requests; they are not treated as free. Old records remain intact and are not retrospectively priced. The direct test currently makes one attempt and no automatic retries. This does not integrate application or evaluation traffic.
