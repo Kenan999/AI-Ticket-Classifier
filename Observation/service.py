@@ -34,6 +34,12 @@ def create_app(config_path=DEFAULT_CONFIG):
             error_json TEXT, created_at TEXT NOT NULL, completed_at TEXT
         )""")
 
+    with closing(sqlite3.connect(path)) as db, db:
+        columns = {row[1] for row in db.execute("PRAGMA table_info(observations)")}
+        if "run_id" not in columns:
+            db.execute("ALTER TABLE observations ADD COLUMN run_id TEXT")
+        db.execute("CREATE INDEX IF NOT EXISTS observations_run ON observations(run_id)")
+
     def body():
         value = request.get_json()
         if not isinstance(value, dict):
@@ -55,12 +61,15 @@ def create_app(config_path=DEFAULT_CONFIG):
                for k in ("provider", "model")) or not isinstance(value.get("request"), dict):
             abort(400, "provider, model and request object required")
         ident = str(uuid.uuid4())
+        run_id = value.get("run_id", ident)
+        if not isinstance(run_id, str) or not 0 < len(run_id) <= 200:
+            abort(400, "run_id must be a non-empty string up to 200 characters")
         with closing(sqlite3.connect(path)) as db, db:
-            db.execute("INSERT INTO observations (id,source,provider,model,request_json,created_at) VALUES (?,?,?,?,?,?)",
+            db.execute("INSERT INTO observations (id,source,provider,model,request_json,created_at,run_id) VALUES (?,?,?,?,?,?,?)",
                        (ident, value["source"], value["provider"], value["model"],
                         json.dumps(clean(value["request"]), ensure_ascii=False),
-                        datetime.now(timezone.utc).isoformat()))
-        return jsonify(id=ident), 201
+                        datetime.now(timezone.utc).isoformat(), run_id))
+        return jsonify(id=ident, run_id=run_id), 201
 
     @app.patch("/observations/<ident>")
     def finish(ident):

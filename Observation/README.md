@@ -42,3 +42,18 @@ Start: `python -m Observation.service`. Host und Port stehen in der Config (Stan
 Nur lokaler Zugriff, kein CORS. Zugangsdaten und HTTP-Header dürfen nicht gesendet werden; bekannte Credential-Felder werden zusätzlich entfernt. Freitext wird nicht automatisch auf Geheimnisse untersucht.
 
 Backend und Evaluation senden noch keine Anfragen an diesen Dienst. Er startet separat; kein automatischer Hintergrundprozess beim Import.
+
+## Eigenständiges Dashboard
+
+Start: `python -m streamlit run Observation/dashboard.py --server.address 127.0.0.1 --server.port 8511`
+
+Liest SQLite ausschließlich lesend. Zeigt die neuesten 200 Anfragen je Quelle, mit Anbieterfilter und aufklappbarer Anfrage, Antwort oder Fehlermeldung. Aktualisierung erfolgt über den Button. Ohne angebundene Aufrufer bleibt die Ansicht leer. Das Evaluation-Dashboard wird nicht verändert.
+
+
+## Gruppierte Läufe
+Aufrufer senden für alle Anfragen derselben Schleife dieselbe eindeutige
+`run_id` beim POST mit. Ohne diese Kennung ist die Anfrage ein eigener Lauf.
+Alte Einträge ohne Kennung werden ebenfalls einzeln angezeigt.
+Das Dashboard zeigt aufklappbare Läufe und darunter eingerückte, aufklappbare
+Anfragen. Anbieter- und Quellenfilter schränken die angezeigten Anfragen ein.
+Die Integration der Aufrufer steht weiterhin aus.
