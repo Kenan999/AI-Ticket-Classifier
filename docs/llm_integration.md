@@ -1,4 +1,4 @@
-# Optional LLM-based Ticket Classification (IHK-028)
+# Optional LLM-based Ticket Classification
 
 This integration is part of the **Backend development branch**, not the live
 website. It does not add another Flask endpoint: the frontend continues to call
@@ -37,7 +37,7 @@ Do not put secrets into the Git repository or frontend JavaScript.
 | `LLM_CATEGORIES` | Comma-separated exact category labels | existing seven |
 
 At this stage the default labels stay unchanged: `Returns`, `Shipping`,
-`Billing`, `Account`, `Technical`, `Orders`, `General`. The ticket IHK-028
+`Billing`, `Account`, `Technical`, `Orders`, `General`. The ticket
 suggests `Delivery`, `Refund`, `Payment`, `Order`, `Account`. **Do not change
 labels until the frontend, Human Review workflow, customer-reply templates,
 existing cases, and the agreed acceptance criteria are updated together.**
