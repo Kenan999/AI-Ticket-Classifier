@@ -128,7 +128,7 @@ class GeminiTests(unittest.TestCase):
             self.assertEqual(app.test_client().get("/case/" + result["ticket_id"]).json["category"], "Account")
 
     def test_five_mvp_examples_through_backend_using_mock_model(self):
-        # Five distinct categories from IHK-028; no real API access or billing.
+        # Five distinct categories; no real API access or billing.
         examples = (
             ("My parcel has not arrived and tracking is stuck.", "Delivery"),
             ("I returned my shoes and need a refund.", "Refund"),

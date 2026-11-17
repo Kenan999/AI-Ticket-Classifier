@@ -1,1 +1,1 @@
-"""IHK AI Ticket Classifier backend package."""
+"""AI Ticket Classifier backend package."""
