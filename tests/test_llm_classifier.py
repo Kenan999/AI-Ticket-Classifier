@@ -59,7 +59,7 @@ class GeminiTests(unittest.TestCase):
     def test_gemini_request_and_json_output(self):
         def fake_open(req, timeout):
             self.assertEqual(req.get_method(), "POST")
-            self.assertIn("gemini-3.1-flash-lite:generateContent", req.full_url)
+            self.assertIn("gemini-3.5-flash-lite:generateContent", req.full_url)
             self.assertEqual(req.get_header("X-goog-api-key"), "test-only-key")
             self.assertEqual(timeout, 8)
             body = json.loads(req.data)
@@ -78,7 +78,7 @@ class GeminiTests(unittest.TestCase):
         )
         self.assertEqual(result.category, "SHIPPING")
         self.assertEqual(result.confidence, 0.89)
-        self.assertEqual(result.model_version, "gemini:gemini-3.1-flash-lite")
+        self.assertEqual(result.model_version, "gemini:gemini-3.5-flash-lite")
 
     def test_supplied_instructions_are_sent_verbatim(self):
         instructions = "First line.\nSecond line. "
@@ -181,7 +181,7 @@ class GeminiTests(unittest.TestCase):
             result = response.json
             self.assertEqual(result["category"], "ACCOUNT")
             self.assertEqual(result["status"], "classified")
-            self.assertEqual(result["model_version"], "gemini:gemini-3.1-flash-lite")
+            self.assertEqual(result["model_version"], "gemini:gemini-3.5-flash-lite")
             self.assertFalse(result["reply_confirmed"])
             self.assertEqual(app.test_client().get("/case/" + result["ticket_id"]).json["category"], "ACCOUNT")
 
