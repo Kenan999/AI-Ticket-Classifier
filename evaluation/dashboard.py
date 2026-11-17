@@ -277,6 +277,10 @@ def render_sidebar():
             if engine == BASELINE:
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
         provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
+        st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
+                    key="batch_evaluation", disabled=engine == BASELINE)
+        if engine != BASELINE and st.session_state.get("batch_evaluation", True):
+            st.caption("Batch-Limits: evaluation/config.py. Standard: höchstens 20 Tickets je Anfrage, bei langen Texten weniger. Alte Einzel-Ergebnisse: Batch ausschalten.")
         prompt_missing = missing_prompt_message(provider)
         if prompt_missing:
             st.info(prompt_missing)
@@ -285,11 +289,18 @@ def render_sidebar():
             try:
                 with st.spinner("Messung läuft …"):
                     tickets, _ = load_mode_tickets(mode)
-                    measured = run_evaluation(
+                    progress_bar = st.progress(0, text="Evaluation: 0 %")
+                    request_status = st.empty()
+                    def show_progress(state):
+                        percent = state["completed"] / state["total"] if state["total"] else 1.0
+                        progress_bar.progress(percent, text=f"Evaluation: {percent:.0%} · {state['completed']}/{state['total']} Tickets verarbeitet")
+                        request_status.caption(f"{state['requests']} HTTP-Anfragen · {state['retries']} Wiederholungen · {state['batches']} geplante Batches · {state['errors']} fehlgeschlagene Tickets")
+                        st.session_state["last_batch_progress"] = dict(state, provider=provider, mode=mode)
+                    measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True),
                         tickets=tickets, provider=provider,
                     )
                     save_results(
-                        measured, results_path(provider, mode),
+                        measured, results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)),
                     )
             except (RuntimeError, FileNotFoundError, ValueError) as exc:
                 st.error(str(exc))
@@ -297,9 +308,15 @@ def render_sidebar():
                 st.success("Neu berechnet und gespeichert.")
                 st.rerun()
 
+        last_run = st.session_state.get("last_batch_progress")
+        if (last_run and last_run["provider"] == provider and last_run["mode"] == mode
+                and st.session_state.get("batch_evaluation", True)):
+            percent = last_run["completed"] / last_run["total"] if last_run["total"] else 1.0
+            st.progress(percent, text=f"Letzter Batch-Lauf: {percent:.0%} verarbeitet")
+            st.caption(f"{last_run['requests']} HTTP-Anfragen, davon {last_run['retries']} Wiederholungen. {last_run['errors']} fehlgeschlagene Tickets. Fortschritt ist nicht Accuracy.")
         st.divider()
         st.caption("Ergebnisdatei")
-        st.code(results_path(provider, mode).name, language=None)
+        st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)).name, language=None)
         return provider, mode, prompt_missing
 
 
@@ -467,7 +484,7 @@ def version_metrics(version, mode=None):
     provider = version["provider"]
     if provider is None or missing_prompt_message(provider):
         return None
-    path = results_path(provider, mode)
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
     if not path.is_file():
         return None
     results = load_results(path)
@@ -756,7 +773,7 @@ def main():
     )
 
     provider, mode, prompt_missing = render_sidebar()
-    path = results_path(provider, mode)
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
 
     if prompt_missing:
         st.title("Ticket-Klassifikator – Evaluation")

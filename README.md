@@ -236,3 +236,39 @@ fit the budget; exhausted quotas still fail immediately. Failures remain explici
 in each result's error field, never replaced with local-rule predictions. Pacing
 is per evaluation process, not an account-wide quota guarantee. Avoid concurrent
 runs using the same provider key. Existing result files are not changed by this.
+
+
+### Evaluation batching
+
+
+Dashboard and CLI now send cloud evaluation tickets in batches. The dashboard
+checkbox switches between batch runs/results and the existing single-ticket runs.
+The application API continues to classify one ticket per request.
+
+Shared settings: `evaluation/config.py`, with separate Gemini and OpenAI model
+profiles. Default maximum: 20 tickets per request, a conservative 16,000 input
+budget, 128 output tokens per ticket plus envelope overhead, and a context reserve.
+Packing uses UTF-8 bytes plus overhead as a conservative sizing estimate, **not an
+exact token count**. It does not attempt to fill the model's entire context window.
+Unknown models require an explicit profile. Provider rate limits depend on the
+account and are separate from context limits; batching does not remove quotas.
+
+Only ticket text and generated IDs are sent; expected labels remain local.
+Responses are matched by ID, and missing/duplicate/invalid or truncated responses
+mark the entire affected batch as failed. No silent baseline fallback occurs.
+Oversized tickets fail preflight before requests. Six-second pacing and the
+existing retry budget apply between batches rather than between tickets.
+
+Batch CSV names end in `_batch_v1.csv`; existing single-ticket result files remain
+intact. Repeating the same batch/provider/prompt/test combination overwrites its
+batch file. Batch context can affect predictions, so compare results separately.
+V2/V3 remain blocked until prompts exist. Live smoke verification used three requests per provider: OpenAI completed all
+45 tickets; Gemini was rate-limited. Generated results are not committed.
+
+Model-limit sources: [OpenAI GPT-4.1 mini](https://developers.openai.com/api/docs/models/gpt-4.1-mini)
+and [Gemini 3.1 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite).
+
+The batch dashboard reports processed-ticket percentage, planned batches, actual
+HTTP attempts (including retries), and failed-ticket count. 100% processed does
+not mean 100% correct or successful. The latest run summary persists in the
+browser session; it is separate from Accuracy and Macro-F1.
