@@ -53,7 +53,9 @@ const backendStatus = document.getElementById("backend-status");
 const reloadButton = document.getElementById("reload-button");
 
 const evaluationLink = document.getElementById("evaluation-monitoring-link");
-const evaluationUrl = window.APP_CONFIG?.evaluationUrl;
+// Use the local evaluation service on loopback; deployed sites use their gateway.
+const evaluationUrl = window.APP_CONFIG?.evaluationUrl ??
+  (localHost ? "http://127.0.0.1:8501" : "/evaluation/");
 if (evaluationUrl) {
   try {
     const url = new URL(evaluationUrl, window.location.href);

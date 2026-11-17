@@ -140,8 +140,13 @@ Main serves its frontend from `frontend/` and routes live requests through
 `/api`. Local previews can set `apiBaseUrl` in their runtime configuration.
 The Human Review correction menu sends the exact nine Bitext labels.
 
-Set `evaluationUrl` in the local runtime configuration to show **AI Operations**
-next to **Reload**. It opens the evaluation dashboard in a new tab.
+**AI Operations** next to **Reload** opens the evaluation dashboard in a new tab.
+On `localhost` or `127.0.0.1`, it automatically uses `http://127.0.0.1:8501`;
+on the deployed site, it uses the same site’s `/evaluation/` route. No config
+edit is needed when switching between those environments. Start the local
+evaluation service separately with `python -m streamlit run evaluation/dashboard.py`.
+Optional `evaluationUrl` runtime configuration overrides the default for custom
+setups; an empty string hides the link.
 
 ## Downloaded development starter
 
