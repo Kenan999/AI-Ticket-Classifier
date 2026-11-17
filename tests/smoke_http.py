@@ -62,7 +62,7 @@ def main():
             classified = request_json(
                 base_url, "/classify", {"text": "My order arrived damaged."}
             )
-            assert classified["category"] == "Returns"
+            assert classified["category"] == "REFUND"
             assert classified["status"] == "classified"
             assert 0 <= classified["confidence"] <= 1
             assert classified["reply_confirmed"] is False
@@ -78,11 +78,11 @@ def main():
                 "ticket_id": uncertain["ticket_id"],
                 "decision": "correct",
                 "reviewer": "HTTP test",
-                "final_category": "Technical",
+                "final_category": "CONTACT",
                 "customer_reply": "A support agent will investigate.",
             })
             assert reviewed["status"] == "reviewed"
-            assert reviewed["final_category"] == "Technical"
+            assert reviewed["final_category"] == "CONTACT"
             assert reviewed["reply_confirmed"] is True
             case = request_json(base_url, "/case/" + uncertain["ticket_id"])
             assert case["reply_confirmed"] is True
@@ -97,7 +97,7 @@ def main():
             with review_csv.open(newline="", encoding="utf-8") as stream:
                 rows = list(csv.DictReader(stream))
             assert len(rows) == 1
-            assert rows[0]["final_label"] == "Technical"
+            assert rows[0]["final_label"] == "CONTACT"
             print("HTTP smoke test OK: /health, /classify, /review, /case, validation and CSV")
         finally:
             process.terminate()

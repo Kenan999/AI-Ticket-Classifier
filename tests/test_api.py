@@ -28,7 +28,7 @@ class TicketApiTests(unittest.TestCase):
         result = self.classify("My order arrived damaged.")
         self.assertTrue(result["ticket_id"].startswith("T-"))
         self.assertEqual(result["text"], "My order arrived damaged.")
-        self.assertEqual(result["category"], "Returns")
+        self.assertEqual(result["category"], "REFUND")
         self.assertEqual(result["status"], "classified")
         self.assertGreaterEqual(result["confidence"], 0.75)
         self.assertLessEqual(result["confidence"], 1.0)
@@ -40,7 +40,7 @@ class TicketApiTests(unittest.TestCase):
 
     def test_unsure_case_waits_for_review(self):
         result = self.classify("Could you please help?")
-        self.assertEqual(result["category"], "General")
+        self.assertEqual(result["category"], "CONTACT")
         self.assertEqual(result["status"], "human_review")
         self.assertTrue(result["review_required"])
         self.assertFalse(result["reply_confirmed"])
@@ -80,20 +80,32 @@ class TicketApiTests(unittest.TestCase):
             "ticket_id": result["ticket_id"],
             "decision": "correct",
             "reviewer": "Kristina",
-            "final_category": "Technical",
+            "final_category": "CONTACT",
             "customer_reply": "A support agent will review the technical problem.",
             "comment": "Human classification",
         })
         self.assertEqual(response.status_code, 200)
         reviewed = response.get_json()
-        self.assertEqual(reviewed["final_category"], "Technical")
-        self.assertEqual(reviewed["predicted_category"], "General")
+        self.assertEqual(reviewed["final_category"], "CONTACT")
+        self.assertEqual(reviewed["predicted_category"], "CONTACT")
         self.assertEqual(reviewed["decision"], "correct")
         self.assertTrue(reviewed["reply_confirmed"])
         with self.review_csv.open(newline="", encoding="utf-8") as stream:
             row = next(csv.DictReader(stream))
-        self.assertEqual(row["predicted_label"], "General")
-        self.assertEqual(row["final_label"], "Technical")
+        self.assertEqual(row["predicted_label"], "CONTACT")
+        self.assertEqual(row["final_label"], "CONTACT")
+
+    def test_review_rejects_legacy_or_unlisted_category(self):
+        result = self.classify("I need help.")
+        for invalid in ("Technical", "GENERAL", "CUSTOM"):
+            response = self.client.post("/review", json={
+                "ticket_id": result["ticket_id"], "decision": "correct",
+                "reviewer": "Kenan", "final_category": invalid,
+                "customer_reply": "We will review your message.",
+            })
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.get_json()["error"]["code"], "invalid_review")
+        self.assertFalse(self.review_csv.exists())
 
     def test_correction_requires_human_reply(self):
         result = self.classify("An unclear issue")
@@ -101,7 +113,7 @@ class TicketApiTests(unittest.TestCase):
             "ticket_id": result["ticket_id"],
             "decision": "correct",
             "reviewer": "Kenan",
-            "final_category": "Orders",
+            "final_category": "ORDER",
         })
         self.assertEqual(response.status_code, 400)
         self.assertFalse(self.review_csv.exists())
@@ -114,7 +126,7 @@ class TicketApiTests(unittest.TestCase):
             "ticket_id": result["ticket_id"],
             "decision": "approve",
             "reviewer": "Kenan",
-            "final_category": "Account",
+            "final_category": "ACCOUNT",
         })
         self.assertEqual(response.status_code, 400)
         self.assertFalse(self.review_csv.exists())
@@ -199,17 +211,17 @@ class TicketApiTests(unittest.TestCase):
             "ticket_id": created["ticket_id"],
             "decision": "correct",
             "reviewer": "Kenan",
-            "final_category": "Account",
+            "final_category": "ACCOUNT",
             "customer_reply": "We will check your account.",
         })
         self.assertEqual(response.status_code, 200)
         listed = self.client.get("/cases").get_json()[0]
-        self.assertEqual(listed["category"], "Account")
+        self.assertEqual(listed["category"], "ACCOUNT")
         self.assertEqual(listed["status"], "reviewed")
         self.assertTrue(listed["reply_confirmed"])
         restarted = create_app(review_path=self.review_csv)
         self.assertEqual(restarted.test_client().get("/cases").get_json()[0]["category"],
-                         "Account")
+                         "ACCOUNT")
 
     def test_cases_list_starts_empty(self):
         self.assertEqual(self.client.get("/cases").get_json(), [])
@@ -226,13 +238,13 @@ class TicketApiTests(unittest.TestCase):
         self.assertTrue(response.get_json()["reply_confirmed"])
         self.assertEqual(response.get_json()["status"], "reviewed")
 
-    def test_dataset_label_adapter_preserves_ui_category(self):
+    def test_api_categories_equal_dataset_labels(self):
         created = self.classify("I forgot my password")
-        self.assertEqual(created["category"], "Account")
+        self.assertEqual(created["category"], "ACCOUNT")
         self.assertEqual(created["dataset_label"], "ACCOUNT")
         ambiguous = self.classify("There is an error")
-        self.assertEqual(ambiguous["category"], "Technical")
-        self.assertIsNone(ambiguous["dataset_label"])
+        self.assertEqual(ambiguous["category"], "CONTACT")
+        self.assertEqual(ambiguous["dataset_label"], "CONTACT")
 
     def test_health_endpoint(self):
         response = self.client.get("/health")

@@ -4,6 +4,11 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from .classifier import DATASET_CATEGORIES
+except ImportError:  # supports direct execution
+    from classifier import DATASET_CATEGORIES
+
 
 class ReviewError(ValueError):
     """A user-supplied review is incomplete or invalid."""
@@ -60,6 +65,9 @@ def save_review(case, payload, csv_path):
             "customer_reply",
             2000,
         )
+
+    if final_category not in DATASET_CATEGORIES:
+        raise ReviewError("final_category must be one of the nine Bitext categories")
 
     reviewed_at = datetime.now(timezone.utc).isoformat()
     record = {

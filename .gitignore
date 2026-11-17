@@ -10,8 +10,12 @@ data/
 .pytest_cache/
 results/
 
-# IDE-local project files
+# Editor-Einstellungen (persoenlich, nicht ins Team-Repo)
 .idea/
+.vscode/
+
+# Private Projektregeln fuer Claude Code
+/CLAUDE.md
 
 # Downloaded local frontend starter (keep outside Git)
 /developer_client.py

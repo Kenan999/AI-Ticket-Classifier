@@ -9,10 +9,13 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from backend.app import create_app
-from backend.classifier import MODEL_VERSION
+from backend.classifier import CATEGORY_GUIDANCE, MODEL_VERSION
 from backend.llm_classifier import (
     DEFAULT_CATEGORIES, LLMError, classify_with_gemini, configured_categories,
 )
+
+from evaluation.evaluate import classify_ticket
+from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, render_prompt
 
 
 class MockResponse:
@@ -40,14 +43,16 @@ def gemini_output(category, confidence):
 
 
 class GeminiTests(unittest.TestCase):
-    def test_default_categories_match_existing_frontend(self):
-        self.assertEqual(len(configured_categories("")), 7)
+    def test_default_categories_match_bitext(self):
+        self.assertEqual(len(configured_categories("")), 9)
         self.assertEqual(configured_categories(""), DEFAULT_CATEGORIES)
 
-    def test_categories_can_change_without_changing_code(self):
-        self.assertEqual(configured_categories("Delivery,Refund,Payment,Order,Account"),
-                         ("Delivery", "Refund", "Payment", "Order", "Account"))
-        for invalid in ("Account,Account", "OnlyOne", "Account,,Refund", "Bad/Name,Good"):
+    def test_categories_are_fixed_to_nine_exact_labels(self):
+        # Deployment may change the order but cannot choose another label set.
+        self.assertEqual(configured_categories(",".join(reversed(DEFAULT_CATEGORIES))),
+                         DEFAULT_CATEGORIES)
+        for invalid in ("Account,Account", "OnlyOne", "ACCOUNT,,REFUND",
+                        "Bad/Name,GOOD", "Shipping,Billing"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 configured_categories(invalid)
 
@@ -59,29 +64,82 @@ class GeminiTests(unittest.TestCase):
             self.assertEqual(timeout, 8)
             body = json.loads(req.data)
             self.assertEqual(body["generationConfig"]["responseMimeType"], "application/json")
-            self.assertIn("Shipping", body["systemInstruction"]["parts"][0]["text"])
+            default_prompt = render_prompt(
+                DEFAULT_PROMPT_VERSION, "gemini", DEFAULT_CATEGORIES,
+                category_guidance=CATEGORY_GUIDANCE,
+            )
+            self.assertEqual(body["systemInstruction"]["parts"][0]["text"], default_prompt)
             self.assertIn("package is delayed", body["contents"][0]["parts"][0]["text"])
-            return MockResponse(gemini_output("Shipping", 0.89))
+            return MockResponse(gemini_output("SHIPPING", 0.89))
 
         result = classify_with_gemini(
             "My package is delayed", api_key="test-only-key",
             categories=DEFAULT_CATEGORIES, opener=fake_open,
         )
-        self.assertEqual(result.category, "Shipping")
+        self.assertEqual(result.category, "SHIPPING")
         self.assertEqual(result.confidence, 0.89)
         self.assertEqual(result.model_version, "gemini:gemini-3.1-flash-lite")
 
-    def test_custom_category(self):
+    def test_supplied_instructions_are_sent_verbatim(self):
+        instructions = "First line.\nSecond line. "
+
+        def fake_open(req, timeout):
+            body = json.loads(req.data)
+            self.assertEqual(body["systemInstruction"]["parts"][0]["text"], instructions)
+            self.assertEqual(json.loads(body["contents"][0]["parts"][0]["text"]),
+                             {"ticket": "My account is locked"})
+            return MockResponse(gemini_output("ACCOUNT", 0.8))
+
+        with patch("backend.llm_classifier.render_prompt") as render_default:
+            result = classify_with_gemini(
+                "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
+                instructions=instructions, opener=fake_open,
+            )
+        render_default.assert_not_called()
+        self.assertEqual(result.category, "ACCOUNT")
+
+    def test_invalid_supplied_instructions_are_rejected_before_request(self):
+        for instructions in ("", " \n", 42):
+            with self.subTest(instructions=instructions), patch("backend.llm_classifier.urlopen") as opener:
+                with self.assertRaises(LLMError):
+                    classify_with_gemini(
+                        "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
+                        instructions=instructions,
+                    )
+                opener.assert_not_called()
+
+    def test_evaluation_uses_the_selected_gemini_prompt(self):
+        for version in ("V1", "V2", "V3"):
+            template = f"{version} example for {{categories}}."
+            with self.subTest(version=version), patch.dict(PROMPTS[version], {"gemini": template}):
+                expected = render_prompt(
+                    version, "gemini", DEFAULT_CATEGORIES, category_guidance=CATEGORY_GUIDANCE,
+                )
+                with patch("backend.llm_classifier.urlopen") as opener, patch(
+                    "backend.llm_classifier.render_prompt",
+                ) as render_default:
+                    opener.return_value = MockResponse(gemini_output("ACCOUNT", 0.8))
+                    category, _, _, error = classify_ticket(
+                        "My account is locked", provider=f"gemini-{version.lower()}",
+                        env={"GEMINI_API_KEY": "test"},
+                    )
+                request = opener.call_args.args[0]
+                body = json.loads(request.data)
+                self.assertEqual(body["systemInstruction"]["parts"][0]["text"], expected)
+                render_default.assert_not_called()
+                self.assertEqual((category, error), ("ACCOUNT", ""))
+
+    def test_refund_category(self):
         result = classify_with_gemini(
-            "I want a refund", api_key="test", categories=("Refund", "Order"),
-            opener=lambda req, timeout: MockResponse(gemini_output("Refund", .8)),
+            "I want a refund", api_key="test", categories=DEFAULT_CATEGORIES,
+            opener=lambda req, timeout: MockResponse(gemini_output("REFUND", .8)),
         )
-        self.assertEqual(result.category, "Refund")
+        self.assertEqual(result.category, "REFUND")
 
     def test_invalid_model_response_rejected(self):
         for category, confidence in (
-            ("NotAllowed", .9), ("Account", 2.5), ("Account", "certain"),
-            ("Account", True), ("Account", -0.2),
+            ("NotAllowed", .9), ("ACCOUNT", 2.5), ("ACCOUNT", "certain"),
+            ("ACCOUNT", True), ("ACCOUNT", -0.2),
         ):
             with self.subTest(category=category, confidence=confidence):
                 with self.assertRaises(LLMError):
@@ -115,26 +173,26 @@ class GeminiTests(unittest.TestCase):
                            classify_with_gemini("abc", api_key="test",
                                 categories=DEFAULT_CATEGORIES,
                                 opener=lambda req, timeout:
-                                    MockResponse(gemini_output("Account", 0.93)))):
+                                    MockResponse(gemini_output("ACCOUNT", 0.93)))):
                     response = app.test_client().post("/classify", json={
                         "text": "I cannot sign in to my account",
                     })
             self.assertEqual(response.status_code, 200)
             result = response.json
-            self.assertEqual(result["category"], "Account")
+            self.assertEqual(result["category"], "ACCOUNT")
             self.assertEqual(result["status"], "classified")
             self.assertEqual(result["model_version"], "gemini:gemini-3.1-flash-lite")
             self.assertFalse(result["reply_confirmed"])
-            self.assertEqual(app.test_client().get("/case/" + result["ticket_id"]).json["category"], "Account")
+            self.assertEqual(app.test_client().get("/case/" + result["ticket_id"]).json["category"], "ACCOUNT")
 
     def test_five_mvp_examples_through_backend_using_mock_model(self):
         # Five distinct categories from IHK-028; no real API access or billing.
         examples = (
-            ("My parcel has not arrived and tracking is stuck.", "Delivery"),
-            ("I returned my shoes and need a refund.", "Refund"),
-            ("My credit card payment failed at checkout.", "Payment"),
-            ("I want to change an item in my order.", "Order"),
-            ("I cannot log in to my account.", "Account"),
+            ("My parcel has not arrived and tracking is stuck.", "DELIVERY"),
+            ("I returned my shoes and need a refund.", "REFUND"),
+            ("My credit card payment failed at checkout.", "PAYMENT"),
+            ("I want to change an item in my order.", "ORDER"),
+            ("I cannot log in to my account.", "ACCOUNT"),
         )
         labels = tuple(label for _, label in examples)
         with tempfile.TemporaryDirectory() as tmp:
@@ -144,11 +202,11 @@ class GeminiTests(unittest.TestCase):
                 with self.subTest(category=label), patch.dict(os.environ, {
                     "LLM_PROVIDER": "gemini",
                     "GEMINI_API_KEY": "mock-only-key",
-                    "LLM_CATEGORIES": ",".join(labels),
+                    "LLM_CATEGORIES": ",".join(DEFAULT_CATEGORIES),
                 }):
                     with patch("backend.app.classify_with_gemini", return_value=
                                classify_with_gemini(ticket, api_key="mock-only-key",
-                                   categories=labels,
+                                   categories=DEFAULT_CATEGORIES,
                                    opener=lambda req, timeout: MockResponse(
                                        gemini_output(label, .91)))):
                         response = app.test_client().post("/classify", json={"text": ticket})
@@ -173,7 +231,7 @@ class GeminiTests(unittest.TestCase):
                         "text": "My package has not arrived",
                     })
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.json["category"], "Shipping")
+            self.assertEqual(response.json["category"], "DELIVERY")
             self.assertEqual(response.json["model_version"], MODEL_VERSION)
 
 

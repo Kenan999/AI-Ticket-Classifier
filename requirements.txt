@@ -4,3 +4,4 @@ pandas==3.1.1
 python-dateutil==4.0.0
 tzdata==2026.6
 Flask>=3.0,<4.0
+streamlit>=1.67,<2.0
