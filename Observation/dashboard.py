@@ -214,11 +214,11 @@ def show_metrics(value):
         st.json(metadata)
 
 
-def send_test(provider, model, text, run_id=None, run_kind="single"):
-    """Send one explicit user-triggered request and record it via the local service."""
+ANSWER_TOKENS = 1024
+
+
+def test_environment():
     import os
-    from urllib.request import Request, urlopen
-    config = json.loads(Path(__file__).with_name("config.json").read_text())
     env = dict(os.environ)
     env_path = ROOT / "backend" / ".env"
     if env_path.is_file():
@@ -227,21 +227,50 @@ def send_test(provider, model, text, run_id=None, run_kind="single"):
                 key, value = line.split("=", 1)
                 if key.strip() in {"OPENAI_API_KEY", "GEMINI_API_KEY", "OPENAI_MODEL", "GEMINI_MODEL"}:
                     env.setdefault(key.strip(), value.strip().strip("\"'"))
+    return env
+
+
+def selected_model(provider, model):
+    return test_environment().get("OPENAI_MODEL", model) if provider == "openai" else model
+
+
+def request_budget(config, model, text):
+    limits = config.get("request_limits", {}).get(model, {})
+    # Deliberately conservative local estimate, not provider tokenization.
+    estimate = len(text.encode("utf-8")) + 32
+    ceiling = limits.get("input_tokens") or limits.get("context_tokens")
+    used = estimate + (ANSWER_TOKENS if limits.get("context_tokens") else 0)
+    return {"model": model, "estimated_input_tokens": estimate,
+            "estimate_method": "UTF-8 bytes + 32; conservative estimate, not exact",
+            "answer_tokens": ANSWER_TOKENS, "limits": limits,
+            "used": used, "ceiling": ceiling,
+            "blocked": bool(ceiling and used > ceiling) or bool(limits.get("output_tokens", ANSWER_TOKENS) < ANSWER_TOKENS)}
+
+
+def send_test(provider, model, text, run_id=None, run_kind="single"):
+    """Send one explicit user-triggered request and record it via the local service."""
+    import os
+    from urllib.request import Request, urlopen
+    config = json.loads(Path(__file__).with_name("config.json").read_text())
+    env = test_environment()
     key = env.get(provider.upper() + "_API_KEY", "").strip()
     if not key:
         raise ValueError("Für diesen Anbieter ist kein API-Schlüssel konfiguriert.")
-    model = model if provider == "gemini" else env.get(provider.upper() + "_MODEL", model)
+    model = selected_model(provider, model)
+    budget = request_budget(config, model, text)
+    if budget["blocked"]:
+        raise ValueError("Lokale Größenprüfung überschritten; Anfrage nicht gesendet.")
     import re
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", model):
         raise ValueError("Ungültiger Modellname.")
     if provider == "openai":
         url = "https://api.openai.com/v1/chat/completions"
-        payload = {"model": model, "messages": [{"role": "user", "content": text}], "max_completion_tokens": 1024}
+        payload = {"model": model, "messages": [{"role": "user", "content": text}], "max_completion_tokens": ANSWER_TOKENS}
         headers = {"Authorization": "Bearer " + key}
     elif provider == "gemini":
         url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
         payload = {"contents": [{"role": "user", "parts": [{"text": text}]}],
-                   "generationConfig": {"maxOutputTokens": 1024}}
+                   "generationConfig": {"maxOutputTokens": ANSWER_TOKENS}}
         headers = {"x-goog-api-key": key}
     else:
         raise ValueError("Anbieter wird noch nicht unterstützt.")
@@ -261,7 +290,7 @@ def send_test(provider, model, text, run_id=None, run_kind="single"):
         return json.loads(raw)
     import uuid
     ident = post(base + "/observations", {"source": "application", "provider": provider,
-                 "model": model, "request": {**payload, "_observation": {"run_kind": run_kind}}, "run_id": run_id or str(uuid.uuid4())})["id"]
+                 "model": model, "request": {**payload, "_observation": {"run_kind": run_kind, "request_budget": budget}}, "run_id": run_id or str(uuid.uuid4())})["id"]
     import time
     started = time.perf_counter()
     transport = {"endpoint": url, "method": "POST", "timeout_seconds": 30,
@@ -297,12 +326,14 @@ def test_dialog():
         return
     st.caption("Ein direkter Modelltest, ohne Klassifizierungs-Prompt. Senden nutzt die API und speichert Anfrage und Antwort lokal.")
     mode = st.radio("Testart", ["Einzel", "Loop"], horizontal=True)
-    with st.form("observation_test"):
-        selected = st.selectbox("LLM", range(len(models)),
-            format_func=lambda i: models[i]["provider"] + " · " + models[i]["default_model"])
-        first = st.text_area("Abfrage 1", max_chars=12000)
-        second = st.text_area("Abfrage 2", max_chars=12000) if mode == "Loop" else None
-        submit = st.form_submit_button("Senden")
+    selected = st.selectbox("LLM", range(len(models)),
+        format_func=lambda i: models[i]["provider"] + " · " + selected_model(models[i]["id"], models[i]["default_model"]))
+    first = st.text_area("Abfrage 1", max_chars=12000)
+    second = st.text_area("Abfrage 2", max_chars=12000) if mode == "Loop" else None
+    blocked = any(request_budget(config, selected_model(models[selected]["id"], models[selected]["default_model"]), text)["blocked"] for text in ([first, second] if mode == "Loop" else [first]))
+    if blocked:
+        st.error("Lokale Größenprüfung überschritten. Bitte Eingabe kürzen.")
+    submit = st.button("Senden", disabled=blocked)
     if submit:
         st.session_state.pop("observation_test_response", None)
         inputs = [first, second] if mode == "Loop" else [first]
@@ -351,6 +382,30 @@ def test_dialog():
     if st.button("Schließen"):
         st.session_state["observation_test_open"] = False
         st.rerun()
+
+
+def model_overview():
+    config = json.loads(Path(__file__).with_name("config.json").read_text())
+    st.subheader("Modelle & Anfragegrenzen")
+    st.caption("Im Observation-Test konfigurierte Modelle. Modellgrenzen aus der Dokumentation; keine Live-Kontingente und keine Verfügbarkeitsgarantie für deinen Schlüssel.")
+    rows = []
+    for item in config.get("llms", []):
+        model = selected_model(item["id"], item["default_model"])
+        limits = config.get("request_limits", {}).get(model, {})
+        rows.append({"Anbieter": item["provider"], "Modell": model,
+                     "Eingabegrenze (Tokens)": limits.get("input_tokens", "Nicht separat angegeben" if limits else "Unbekannt"),
+                     "Kontext: Eingabe + Antwort": limits.get("context_tokens", "Nicht separat angegeben" if limits else "Unbekannt"),
+                     "Max. Ausgabe (Tokens)": limits.get("output_tokens", "Unbekannt"),
+                     "Antwortlimit im Test": ANSWER_TOKENS,
+                     "Live-Verfügbarkeit": "Nicht geprüft",
+                     "Minuten-/Tageskontingent": "Nicht verfügbar"})
+    st.dataframe([{k: str(v) for k, v in row.items()} for row in rows], hide_index=True, width="stretch")
+    st.caption("Das Testfeld erlaubt zusätzlich maximal 12.000 Zeichen pro Anfrage. Bei Loops gilt die Grenze für jede Anfrage einzeln.")
+    for item in config.get("llms", []):
+        model = selected_model(item["id"], item["default_model"])
+        limits = config.get("request_limits", {}).get(model, {})
+        if limits.get("source"):
+            st.markdown(f"[{model}: Modell-Dokumentation]({limits['source']}) · geprüft {limits['checked']}")
 
 
 def render():
@@ -425,6 +480,37 @@ def render():
         z-index: 1000001;
         background: transparent;
     }
+    .st-key-obs-provider-filter img[alt="openai"],
+    [class*="st-key-obs-model-option-"] img[alt="openai"] {
+        filter: drop-shadow(0 0 1px #fff) drop-shadow(0 0 1px #fff);
+    }
+    [class*="st-key-obs-model-option-"] img {
+        width: 1.25rem; height: 1.25rem; object-fit: contain;
+        vertical-align: middle;
+    }
+    .st-key-obs-provider-filter img {
+        width: 1.25rem; height: 1.25rem; object-fit: contain;
+        vertical-align: middle;
+    }
+    .st-key-obs-source-filter, .st-key-obs-provider-filter {
+        border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+        border-radius: 0.5rem;
+        padding: 0.15rem 0.45rem;
+    }
+    .st-key-obs-source-filter [data-testid="stHorizontalBlock"],
+    .st-key-obs-provider-filter [data-testid="stHorizontalBlock"] {
+        gap: 0.35rem;
+    }
+    .st-key-obs-source-filter [data-testid="stColumn"]:first-child,
+    .st-key-obs-provider-filter [data-testid="stColumn"]:first-child {
+        flex: 0 0 auto !important;
+        width: auto !important;
+        min-width: max-content !important;
+    }
+    .st-key-obs-source-filter p, .st-key-obs-provider-filter p {
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
     .st-key-observation-toolbar h3 {
         margin: 0; padding: 0; line-height: 40px;
     }
@@ -433,7 +519,16 @@ def render():
     }
     </style>""")
     with st.container(key="observation-toolbar"):
-        title_column, source_column, provider_column, refresh_column, test_column = st.columns([3, 2, 2, 1.4, 1], vertical_alignment="center")
+        title_column, source_group, provider_group, refresh_column, test_column, view_column = st.columns([1.8, 1.8, 3.1, 1.3, 0.8, 3.5], vertical_alignment="center", gap="small")
+    with source_group:
+        with st.container(key="obs-source-filter"):
+            source_label, source_column = st.columns([0.65, 1.35], gap=None, vertical_alignment="center")
+    with provider_group:
+        with st.container(key="obs-provider-filter"):
+            provider_label, provider_column = st.columns([0.8, 1.1], gap=None, vertical_alignment="center")
+    source_label.markdown("**Quelle:**")
+    model_label = provider_label.empty()
+    model_label.markdown("**Modell:**")
     title_column.markdown("### Observation")
     if test_column.button("Test"):
         st.session_state.pop("observation_test_response", None)
@@ -444,6 +539,10 @@ def render():
                           format_func=lambda value: {"Alle": "Alle", "application": "Ticketanfragen",
                                                       "evaluation": "Evaluationen"}[value])
     refresh_column.button("Aktualisieren", width="stretch")
+    view = view_column.radio("Ansicht", ["Anfragen", "Modelle & Limits"], horizontal=True, label_visibility="collapsed")
+    if view == "Modelle & Limits":
+        model_overview()
+        return
     path = database_path()
     if not path.is_file():
         st.info("Noch keine Datenbank vorhanden. Starte zuerst den Observation-Dienst.")
@@ -456,9 +555,23 @@ def render():
     if not rows:
         st.info("Noch keine Anfragen gespeichert. Backend und Evaluation sind noch nicht an Observation angebunden.")
         return
-    provider = provider_column.selectbox("Anbieter", ["Alle"] + sorted({r["provider"] for r in rows}), label_visibility="collapsed")
-    if provider != "Alle":
-        rows = [r for r in rows if r["provider"] == provider]
+    model_options = sorted({(r["provider"], r["model"]) for r in rows})
+    selected = st.session_state.get("obs_model_filter")
+    if selected not in model_options:
+        selected = None
+    current_label = "Alle Modelle" if selected is None else provider_logos([{"provider": selected[0], "model": selected[1]}]) or selected[1]
+    with provider_column.popover(current_label, width="stretch"):
+        if st.button("Alle Modelle", key="obs-model-all", width="stretch"):
+            st.session_state["obs_model_filter"] = None
+            st.rerun()
+        for index, option in enumerate(model_options):
+            label = provider_logos([{"provider": option[0], "model": option[1]}]) or option[1]
+            if st.button(label, key=f"obs-model-option-{index}", width="stretch",
+                         type="primary" if option == selected else "secondary"):
+                st.session_state["obs_model_filter"] = option
+                st.rerun()
+    if selected is not None:
+        rows = [r for r in rows if (r["provider"], r["model"]) == selected]
     groups = {}
     for row in rows:
         key = row.get("run_id") or row["id"]
