@@ -195,6 +195,7 @@ def load_results(path):
     frame = pd.read_csv(path)
     results = []
     for row in frame.to_dict(orient="records"):
+        error = row.get("error")
         results.append({
             "text": row["text"],
             "expected": row["expected"],
@@ -203,6 +204,7 @@ def load_results(path):
             "model_version": row["model_version"],
             "prompt_version": row.get("prompt_version"),
             "correct": row["expected"] == row["predicted"],
+            "error": error if isinstance(error, str) else "",
         })
     return results
 
@@ -400,6 +402,13 @@ def render_kpis(results):
         )
 
     st.caption(f"{correct} von {len(results)} Tickets richtig einsortiert.")
+
+    provider_errors = sum(bool(result.get("error")) for result in results)
+    if provider_errors:
+        st.warning(
+            f"{provider_errors} Tickets ohne Klassifikation wegen Providerfehlern. "
+            "Diese Tickets zählen in den Kennzahlen als falsch."
+        )
 
     with st.expander("Was bedeuten diese Kennzahlen?"):
         st.markdown(METRIC_EXPLANATIONS)

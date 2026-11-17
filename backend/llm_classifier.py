@@ -6,28 +6,26 @@ Gemini is selected by the request or server default and a server key is configur
 import json
 import os
 import re
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 try:
     from .classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+    from .llm_retry import LLMError, read_provider_response
 except ImportError:  # direct execution: python3 backend/app.py
     import sys
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     from classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+    from llm_retry import LLMError, read_provider_response
 
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
 DEFAULT_MODEL = "gemini-3.1-flash-lite"
 MAX_RESPONSE_BYTES = 32 * 1024
-
-
-class LLMError(Exception):
-    """Provider unavailable, invalid configuration or untrusted response."""
 
 
 def configured_categories(raw=None):
@@ -86,10 +84,11 @@ def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
-    open_request = opener if opener is not None else urlopen
     try:
-        with open_request(req, timeout=float(timeout)) as response:
-            body = response.read(MAX_RESPONSE_BYTES + 1)
+        body = read_provider_response(
+            req, opener=urlopen if opener is None else opener,
+            timeout=float(timeout), max_bytes=MAX_RESPONSE_BYTES, provider="Gemini",
+        )
         if len(body) > MAX_RESPONSE_BYTES:
             raise LLMError("Provider response exceeded size limit")
         data = json.loads(body)
@@ -108,7 +107,7 @@ def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
                 or not 0 <= confidence <= 1):
             raise LLMError("Provider returned an invalid confidence")
         return PredictionResult(category, float(confidence), "gemini:" + model)
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError,
+    except (URLError, TimeoutError, OSError, ValueError, KeyError,
             TypeError, IndexError, UnicodeDecodeError) as exc:
         # Do not include response bodies, requests, API keys or customer text in logs.
         raise LLMError("Gemini request or response failed") from exc

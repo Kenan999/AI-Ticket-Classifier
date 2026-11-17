@@ -1,15 +1,17 @@
 """Optional OpenAI ticket classification adapter. Keys stay server-side."""
 import json
 import re
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 try:
     from .classifier import CATEGORY_GUIDANCE, PredictionResult
-    from .llm_classifier import LLMError, configured_categories
+    from .llm_classifier import configured_categories
+    from .llm_retry import LLMError, read_provider_response
 except ImportError:
     from classifier import CATEGORY_GUIDANCE, PredictionResult
-    from llm_classifier import LLMError, configured_categories
+    from llm_classifier import configured_categories
+    from llm_retry import LLMError, read_provider_response
 
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
@@ -46,8 +48,10 @@ def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODE
         method="POST",
     )
     try:
-        with (opener or urlopen)(request, timeout=float(timeout)) as response:
-            body = response.read(MAX_RESPONSE_BYTES + 1)
+        body = read_provider_response(
+            request, opener=urlopen if opener is None else opener,
+            timeout=float(timeout), max_bytes=MAX_RESPONSE_BYTES, provider="OpenAI",
+        )
         if len(body) > MAX_RESPONSE_BYTES:
             raise LLMError("Provider response exceeded size limit")
         data = json.loads(body)
@@ -61,6 +65,6 @@ def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODE
                 or not 0 <= confidence <= 1):
             raise LLMError("Provider returned invalid confidence")
         return PredictionResult(category, float(confidence), "openai:" + model)
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError,
+    except (URLError, TimeoutError, OSError, ValueError, KeyError,
             TypeError, IndexError, UnicodeDecodeError) as exc:
         raise LLMError("OpenAI request or response failed") from exc
