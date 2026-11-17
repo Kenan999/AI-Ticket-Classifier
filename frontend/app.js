@@ -2,10 +2,10 @@
 // The backend connection is added step by step. So far: GET /health, POST /classify,
 // POST /review and GET /cases (saved tickets are loaded when the page opens).
 
-// Backend API address. Change it here if the backend runs somewhere else.
-const API_BASE_URL = ["localhost", "127.0.0.1"].includes(window.location.hostname)
-  ? "http://127.0.0.1:8001"
-  : "/api";
+// Local preview can override the API address. The live site uses its gateway.
+const localHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const API_BASE_URL = window.APP_CONFIG?.apiBaseUrl ||
+  (localHost ? "http://127.0.0.1:8001" : "/api");
 
 const MIN_MESSAGE_LENGTH = 10;
 
@@ -20,9 +20,11 @@ const STATUS_LABELS = {
 // Name sent to the backend as the reviewer (fixed for now).
 const REVIEWER_NAME = "support-agent";
 
-// Categories a reviewer can choose from when correcting a ticket (same names as the backend).
-// General = fallback when the backend finds no keyword.
-const CATEGORIES = ["Returns", "Shipping", "Billing", "Account", "Technical", "Orders", "General"];
+// Exact Bitext category values accepted by the review API.
+const CATEGORIES = [
+  "ACCOUNT", "ORDER", "INVOICE", "CONTACT", "PAYMENT",
+  "FEEDBACK", "REFUND", "DELIVERY", "SHIPPING",
+];
 
 // Development helper: one example ticket per backend category, for the buttons under the form.
 const EXAMPLE_TICKETS = [
@@ -49,6 +51,20 @@ const classifiedList = document.getElementById("classified-list");
 const reviewList = document.getElementById("review-list");
 const backendStatus = document.getElementById("backend-status");
 const reloadButton = document.getElementById("reload-button");
+
+const evaluationLink = document.getElementById("evaluation-monitoring-link");
+const evaluationUrl = window.APP_CONFIG?.evaluationUrl;
+if (evaluationUrl) {
+  try {
+    const url = new URL(evaluationUrl, window.location.href);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      evaluationLink.href = url.href;
+      evaluationLink.hidden = false;
+    }
+  } catch {
+    // Leave the link hidden when the dashboard address is invalid.
+  }
+}
 const submitButton = form.querySelector("button[type=submit]");
 const submitLabel = submitButton.textContent;
 

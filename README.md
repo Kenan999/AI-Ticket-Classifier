@@ -130,6 +130,15 @@ The automated tests simulate cloud responses and do not validate live API access
 The `Backend` branch is for development; push, open a PR, test/review and merge
 into `main` for the existing deployment workflow. This checkout is not live.
 
+## Shoply frontend
+
+Main serves its frontend from `frontend/` and routes live requests through
+`/api`. Local previews can set `apiBaseUrl` in their runtime configuration.
+The Human Review correction menu sends the exact nine Bitext labels.
+
+Set `evaluationUrl` in the local runtime configuration to show **AI Operations**
+next to **Reload**. It opens the evaluation dashboard in a new tab.
+
 ## Downloaded development starter
 
 When using the shared backend during frontend development, keep the downloaded
