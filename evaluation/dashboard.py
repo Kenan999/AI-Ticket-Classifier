@@ -230,39 +230,58 @@ def mode_caption(mode):
     return f"*{MODES[mode]['file']}*"
 
 
-def render_sidebar():
-    """Steuerung in der Seitenleiste.
+def missing_prompt_message(provider):
+    from evaluation.prompts import PROMPTS
+    if provider == BASELINE:
+        return None
+    method = PROVIDERS[provider]
+    version = method["prompt_version"]
+    template = PROMPTS.get(version, {}).get(method["provider"], "")
+    if template.strip():
+        return None
+    return f"Bitte zuerst den Prompt für {version} in evaluation/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
 
-    Gibt (provider, mode) zurueck: womit gemessen wird und aus welcher
-    Datenquelle die Tickets kommen.
-    """
+
+def render_sidebar():
+    """Choose test dataset, prompt version, then classification method."""
     with st.sidebar:
         st.header("Steuerung")
-        provider = st.selectbox(
-            "Verfahren",
-            options=[key for key in PROVIDERS if key != GEMINI],
-            format_func=lambda key: PROVIDERS[key]["label"],
-            help=(
-                "Regeln laufen offline. Gemini und OpenAI senden Tickets "
-                "an den gewählten Anbieter und benötigen einen API-Key."
-            ),
-        )
-        # st.radio statt selectbox: nur das Radio kann eine zweite,
-        # graue Zeile je Eintrag anzeigen (captions).
         mode = st.radio(
-            "Datenquelle",
-            options=list(MODES),
-            format_func=mode_label,
-            captions=[mode_caption(key) for key in MODES],
-            help=(
-                "Alle drei ziehen aus dem echten Datensatz, mit festem "
-                f"Seed {SAMPLE_SEED} - jeder Lauf dieselbe Stichprobe. "
-                "1 prueft nur, ob die Messung laeuft. 2 vergleicht "
-                "Prompts. 3 misst auf unabhaengigen Testdaten."
-            ),
+            "1. Test und Datensatz", options=list(MODES),
+            format_func=lambda key: {
+                "smoke": "Smoke-Test · 45 Tickets",
+                "validation": "Prompt-Validierung · 180 Tickets",
+                "final": "Endabnahme · 1.800 Tickets",
+            }[key],
         )
+        dataset_error = None
+        try:
+            _, info = load_mode_tickets(mode)
+            st.info(f"Dieser Datensatz wird verwendet: {MODES[mode]['file']} — {info['tickets']} Tickets.")
+            st.caption("Feste Stichprobe für vergleichbare Ergebnisse." if mode != "final" else "Unabhängige Testdaten für die Endabnahme.")
+        except (FileNotFoundError, ValueError, RuntimeError) as exc:
+            dataset_error = str(exc)
+            st.error(dataset_error)
+        prompt_controls = st.container()
+        engine = st.selectbox(
+            "3. Verfahren", options=[BASELINE, "gemini", "openai"],
+            format_func=lambda key: {BASELINE: "Lokale Regeln", "gemini": "Gemini", "openai": "OpenAI"}[key],
+            help="Lokale Regeln brauchen keinen Prompt. Gemini und OpenAI benötigen einen API-Key.",
+        )
+        with prompt_controls:
+            version = st.selectbox(
+                "2. Prompt-Version", options=["V1", "V2", "V3"],
+                disabled=engine == BASELINE,
+                help="V2 und V3 bleiben gesperrt, bis ihre Prompts eingetragen sind.",
+            )
+            if engine == BASELINE:
+                st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
+        provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
+        prompt_missing = missing_prompt_message(provider)
+        if prompt_missing:
+            st.info(prompt_missing)
 
-        if st.button("Evaluation neu ausführen", width="stretch"):
+        if st.button("Evaluation neu ausführen", width="stretch", disabled=bool(prompt_missing or dataset_error)):
             try:
                 with st.spinner("Messung läuft …"):
                     tickets, _ = load_mode_tickets(mode)
@@ -281,7 +300,7 @@ def render_sidebar():
         st.divider()
         st.caption("Ergebnisdatei")
         st.code(results_path(provider, mode).name, language=None)
-        return provider, mode
+        return provider, mode, prompt_missing
 
 
 def render_header(results, provider, path, mode=None):
@@ -446,7 +465,7 @@ def version_metrics(version, mode=None):
     niemals Platzhalterzahlen erfunden.
     """
     provider = version["provider"]
-    if provider is None:
+    if provider is None or missing_prompt_message(provider):
         return None
     path = results_path(provider, mode)
     if not path.is_file():
@@ -736,14 +755,19 @@ def main():
         layout="wide",
     )
 
-    provider, mode = render_sidebar()
+    provider, mode, prompt_missing = render_sidebar()
     path = results_path(provider, mode)
+
+    if prompt_missing:
+        st.title("Ticket-Klassifikator – Evaluation")
+        st.info(prompt_missing)
+        return
 
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
             f"Für \"{PROVIDERS[provider]['label']}\" mit der Quelle "
-            f"\"{mode_label(mode)}\" gibt es noch keine Ergebnisse. "
+            f"\"{MODES[mode]['label']}\" gibt es noch keine Ergebnisse. "
             "Bitte links auf \"Evaluation neu ausführen\" klicken."
         )
         return

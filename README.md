@@ -77,7 +77,9 @@ python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
 Gemini and OpenAI reuse their backend adapters and the shared system prompts
 in `evaluation/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
 V2 and V3 are empty placeholders for future prompts; selecting either raises a
-not-configured error before any provider call. Select a version with
+not-configured error before any provider call. The dashboard shows a prompt-entry
+message and disables execution for those empty versions.
+V1 and local rules can still use Smoke, Validation, and Final. Select a version with
 `--provider gemini-v1` through `gemini-v3`, or `openai-v1` through `openai-v3`.
 Set the matching `GEMINI_API_KEY` or `OPENAI_API_KEY` in the process environment
 or `backend/.env`. A final run makes 1,800 requests to the selected provider.
@@ -217,3 +219,19 @@ to obtain its updated timestamps.
 These filters are implemented in the development API only. The deployed gateway
 and downloaded local-testing proxy currently reject query parameters and have not
 been changed. No frontend controls or production changes are included here.
+
+
+### Evaluation selection
+
+Choose the test and dataset, then the prompt version and classification method:
+
+- Smoke: 45 tickets sampled from validation.csv.
+- Prompt validation: 180 tickets sampled from validation.csv.
+- Final acceptance: all 1,800 held-out tickets from test.csv.
+
+The sidebar shows the source filename and actual ticket count before execution.
+Each test can use V1, V2 or V3 with Gemini or OpenAI. Empty prompts show a reminder,
+disable execution and display no results. Local rules skip prompt selection.
+Test selection keeps the established dataset sizes and result filenames, so existing
+results remain available without mixing test datasets. Changing controls does not run
+an evaluation; only the run button starts it.
