@@ -41,6 +41,7 @@ from backend.llm_classifier import (
 )
 
 from backend.openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
+from evaluation.config import RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES, render_prompt
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -106,6 +107,7 @@ ENV_KEYS = (
     "OPENAI_API_KEY",
     "OPENAI_MODEL",
     "EVALUATION_RETRY_BUDGET_SECONDS",
+    "EVALUATION_BATCH_TIMEOUT_SECONDS",
     "EVALUATION_REQUEST_INTERVAL_SECONDS",
     "LLM_TIMEOUT_SECONDS",
     "LLM_CATEGORIES",
@@ -287,7 +289,7 @@ def classify_ticket(text, provider=BASELINE, env=None):
             categories=categories,
             model=env.get(f"{prefix}_MODEL", default_model),
             timeout=float(env.get("LLM_TIMEOUT_SECONDS", "8")),
-            retry_budget=float(env.get("EVALUATION_RETRY_BUDGET_SECONDS", "120")),
+            retry_budget=float(env.get("EVALUATION_RETRY_BUDGET_SECONDS", RETRY_BUDGET_SECONDS)),
             **prompt_options,
         )
     except (LLMError, ValueError, OverflowError) as exc:
@@ -306,7 +308,7 @@ def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
     env = load_env() if provider != BASELINE else {}
     prompt_version = PROVIDERS[provider].get("prompt_version", "")
     mapping = category_to_label()
-    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", "6")) if provider != BASELINE else 0
+    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS)) if provider != BASELINE else 0
     if not math.isfinite(interval) or not 0 <= interval <= 600:
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None

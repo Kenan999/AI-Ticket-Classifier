@@ -280,7 +280,7 @@ def render_sidebar():
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
                     key="batch_evaluation", disabled=engine == BASELINE)
         if engine != BASELINE and st.session_state.get("batch_evaluation", True):
-            st.caption("Batch-Limits: evaluation/config.py. Standard: höchstens 20 Tickets je Anfrage, bei langen Texten weniger. Alte Einzel-Ergebnisse: Batch ausschalten.")
+            st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
         prompt_missing = missing_prompt_message(provider)
         if prompt_missing:
             st.info(prompt_missing)
@@ -291,10 +291,12 @@ def render_sidebar():
                     tickets, _ = load_mode_tickets(mode)
                     progress_bar = st.progress(0, text="Evaluation: 0 %")
                     request_status = st.empty()
+                    limit_status = st.empty()
                     def show_progress(state):
                         percent = state["completed"] / state["total"] if state["total"] else 1.0
                         progress_bar.progress(percent, text=f"Evaluation: {percent:.0%} · {state['completed']}/{state['total']} Tickets verarbeitet")
-                        request_status.caption(f"{state['requests']} HTTP-Anfragen · {state['retries']} Wiederholungen · {state['batches']} geplante Batches · {state['errors']} fehlgeschlagene Tickets")
+                        request_status.caption(f"{state['requests']} HTTP-Anfragen · {state['retries']} Wiederholungen · {state['batches']} geplante Batches · {state['errors']} fehlgeschlagene Tickets · {state.get('metadata_requests', 0)} Metadaten-Anfragen")
+                        limit_status.caption(f"Limits: {state.get('limits_source', 'configured')}. Kontingentinformationen nur soweit der Provider sie liefert.")
                         st.session_state["last_batch_progress"] = dict(state, provider=provider, mode=mode)
                     measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True),
                         tickets=tickets, provider=provider,
@@ -488,7 +490,7 @@ def version_metrics(version, mode=None):
     if not path.is_file():
         return None
     results = load_results(path)
-    if not results:
+    if not results or all(result.get("error") for result in results):
         return None
     return {
         "results": results,
@@ -748,7 +750,7 @@ def render_version_comparison(mode=None):
     st.html(version_table_html(measured))
     if missing:
         st.caption(
-            "Noch nicht gemessen: " + ", ".join(missing)
+            "Keine auswertbaren Ergebnisse: " + ", ".join(missing)
             + ". Sobald eine Version eine Ergebnisdatei hat, füllen "
             "sich Tabelle und Diagramm von selbst."
         )
@@ -795,6 +797,17 @@ def main():
         return
 
     render_header(results, provider, path, mode)
+    if all(result.get("error") for result in results):
+        st.error("Keine gültigen Vorhersagen: Alle Anfragen sind fehlgeschlagen. Accuracy und F1 sind nicht auswertbar.")
+        st.subheader("Anfragefehler")
+        from collections import Counter
+        st.dataframe([{"Fehler": error, "Tickets": count}
+                      for error, count in Counter(r.get("error") for r in results).items()],
+                     width="stretch")
+        render_version_comparison(mode)
+        st.subheader("Alle Tickets")
+        st.dataframe(for_display(results), width="stretch")
+        return
     render_kpis(results)
     st.divider()
 

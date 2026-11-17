@@ -252,14 +252,14 @@ is per evaluation process, not an account-wide quota guarantee. Avoid concurrent
 runs using the same provider key. Existing result files are not changed by this.
 
 
-### Evaluation batching (local change)
+### Evaluation batching
 
 Dashboard and CLI now send cloud evaluation tickets in batches. The dashboard
 checkbox switches between batch runs/results and the existing single-ticket runs.
 The application API continues to classify one ticket per request.
 
 Shared settings: `evaluation/config.py`, with separate Gemini and OpenAI model
-profiles. Default maximum: 20 tickets per request, a conservative 16,000 input
+profiles. No fixed ticket-count cap by default; a conservative 16,000 input
 budget, 128 output tokens per ticket plus envelope overhead, and a context reserve.
 Packing uses UTF-8 bytes plus overhead as a conservative sizing estimate, **not an
 exact token count**. It does not attempt to fill the model's entire context window.
@@ -285,3 +285,34 @@ The batch dashboard reports processed-ticket percentage, planned batches, actual
 HTTP attempts (including retries), and failed-ticket count. 100% processed does
 not mean 100% correct or successful. The latest run summary persists in the
 browser session; it is separate from Accuracy and Macro-F1.
+
+Evaluation retry timing is centralized in evaluation/config.py: the default total
+retry budget is now 300 seconds per request/batch, with six seconds between
+requests/batches. Environment overrides still take precedence. Interactive app
+timeouts are unchanged. Provider-directed waits are honored within that budget;
+longer waits report their duration and budget. This does not increase provider
+quotas and still permits at most two retries.
+
+
+Provider observations: Gemini model metadata is queried once per evaluation and
+can reduce the configured input/output ceilings. If unavailable, the UI explicitly
+labels the configured fallback. OpenAI's model metadata did not expose context
+limits in our probe, so its documented profile remains necessary. Successful and
+failed generation responses supply rate-limit headers when available; the next
+batch waits for an advertised request/token reset if remaining capacity is too
+small. Waits exceeding the evaluation budget are reported without sending that
+batch. Headers are snapshots, not reservations, and concurrent clients can consume
+the same quota. Missing headers are treated as unknown, never unlimited.
+
+Batch count is now determined by text size and output reserve, without a fixed
+20-ticket ceiling. UTF-8 sizing remains conservative and is not exact token
+counting; Gemini countTokens is supported but not invoked by this implementation.
+Metadata requests are counted separately from generation requests and retries.
+Only metadata lookups were made while verifying this update, not new model runs.
+
+Batch generation has a separate 60-second network timeout (override with
+EVALUATION_BATCH_TIMEOUT_SECONDS); the normal app timeout stays unchanged.
+Connection, timeout and invalid-response failures are reported separately.
+Runs with only failed requests show unavailable quality metrics rather than
+zero Accuracy/F1, and remain inspectable in the error table. Existing CSVs are
+not changed. Provider quotas still apply and cannot be increased by this code.
