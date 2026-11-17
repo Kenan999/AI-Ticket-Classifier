@@ -99,17 +99,17 @@ is a model estimate, not calibrated accuracy or a probability of correctness.
 Gemini additionally asks for lower confidence on ambiguous tickets.
 
 Both providers load the selected system prompt from
-[`evaluation/prompts.py`](../evaluation/prompts.py). Runtime classification
+[`backend/llms/prompts.py`](../llms/prompts.py). Runtime classification
 uses V1. Evaluation can select V1, V2, or V3 for either provider. All versions
 receive the same canonical labels and category guidance from
-[`backend/classifier.py`](../backend/classifier.py).
+[`backend/classifier.py`](../classifier.py).
 
 ## Acceptance tests
 
 Run from the repository root:
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m unittest discover -s backend/tests -v
 ```
 
 The test suite uses **mock Gemini and OpenAI responses**, so it requires no network, billing

@@ -6,7 +6,7 @@ restrictions). Keeping the CSV out of the repository avoids those obligations
 and keeps the repo small, so every team member runs this script once after
 cloning:
 
-    python backend/download_data.py
+    python backend/data/download_data.py
 
 What it does:
 1. Downloads one fixed version (a pinned Hugging Face commit) of the CSV.
@@ -31,7 +31,7 @@ from pathlib import Path
 
 import certifi
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DEST_DIR = REPO_ROOT / "data" / "raw"
 
 FILE_NAME = "Bitext_Sample_Customer_Support_Training_Dataset_27K_responses-v11.csv"
@@ -90,5 +90,5 @@ def download(dest_dir=DEFAULT_DEST_DIR):
 
 
 if __name__ == "__main__":
-    # Optional: python backend/download_data.py <other folder>
+    # Optional: python backend/data/download_data.py <other folder>
     download(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DEST_DIR)

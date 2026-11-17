@@ -10,7 +10,7 @@ Die Kennzahlen werden mit den Funktionen aus evaluation/evaluate.py
 berechnet, damit Dashboard und Konsole immer dieselben Werte zeigen.
 
 Starten aus dem Projekt-Root:
-    python -m streamlit run evaluation/dashboard.py
+    (cd backend && python -m streamlit run evaluation/dashboard.py)
 """
 
 import difflib
@@ -27,9 +27,9 @@ import streamlit as st
 # Streamlit startet diese Datei direkt, deshalb kennt Python den
 # Projekt-Root nicht automatisch. Ohne diese Zeile schlaegt der Import
 # von evaluation.evaluate fehl.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from evaluation.evaluate import (  # noqa: E402
+from backend.evaluation.evaluate import (  # noqa: E402
     BASELINE,
     GEMINI,
     MODES,
@@ -87,7 +87,7 @@ VERSIONS = [
             "tint": "#fdf0ea" if method["provider"] == GEMINI else "#f0eefc",
             "ink": "#a8451c" if method["provider"] == GEMINI else "#5541a6",
             "approach": "Versionierter System-Prompt",
-            "prompt": "Prompt-Text in evaluation/prompts.py.",
+            "prompt": "Prompt-Text in backend/llms/prompts.py.",
         }
         for key, method in PROVIDERS.items()
         if key not in {BASELINE, GEMINI}
@@ -233,7 +233,7 @@ def mode_caption(mode):
 
 
 def missing_prompt_message(provider):
-    from evaluation.prompts import PROMPTS
+    from backend.llms.prompts import PROMPTS
     if provider == BASELINE:
         return None
     method = PROVIDERS[provider]
@@ -241,7 +241,7 @@ def missing_prompt_message(provider):
     template = PROMPTS.get(version, {}).get(method["provider"], "")
     if template.strip():
         return None
-    return f"Bitte zuerst den Prompt für {version} in evaluation/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
+    return f"Bitte zuerst den Prompt für {version} in backend/llms/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
 
 
 def render_sidebar():
@@ -280,8 +280,8 @@ def render_sidebar():
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
         provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
         if engine != BASELINE:
-            from evaluation.evaluate import load_env
-            from backend.llm_classifier import DEFAULT_MODEL
+            from backend.evaluation.evaluate import load_env
+            from backend.llms.gemini import DEFAULT_MODEL
             active_model = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else "gpt-4.1-mini")
             st.caption(f"Modell für neue Tests: {active_model}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
@@ -789,7 +789,7 @@ def prompt_texts(version):
     und OpenAI derselbe Text, erscheint er nur einmal. Leere Eintraege
     gelten als noch nicht definiert.
     """
-    from evaluation.prompts import PROMPTS
+    from backend.llms.prompts import PROMPTS
 
     found = {}
     for provider, text in PROMPTS.get(version, {}).items():
@@ -839,7 +839,7 @@ def prompt_diff_html(old, new):
 def render_prompts():
     """Je Prompt-Version eine aufklappbare Karte mit dem echten Text.
 
-    Der Text wird bei jedem Durchlauf frisch aus evaluation/prompts.py
+    Der Text wird bei jedem Durchlauf frisch aus backend/llms/prompts.py
     gelesen und nicht zwischengespeichert. Nach einem Neuladen des
     Dashboards steht hier also immer der aktuelle Stand. Ab der
     zweiten Version kommt ein Vergleich zur Vorgaengerin dazu.

@@ -4,10 +4,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
-try:
-    from .classifier import DATASET_CATEGORIES
-except ImportError:  # supports direct execution
-    from classifier import DATASET_CATEGORIES
+from backend.classifier import DATASET_CATEGORIES
 
 
 class ReviewError(ValueError):

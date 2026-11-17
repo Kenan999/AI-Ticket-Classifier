@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 from backend.app import create_app
 from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
-from backend.llm_classifier import LLMError
-from evaluation import evaluate
+from backend.llms.gemini import LLMError
+from backend.evaluation import evaluate
 
 
 class ProviderSelectionTests(unittest.TestCase):
@@ -164,11 +164,11 @@ class VersionedEvaluationTests(unittest.TestCase):
         ticket = {"ticket_id": "fixture", "text": "Where is my parcel?", "expected": category}
         providers = {
             "gemini": (
-                "backend.llm_classifier.urlopen",
+                "backend.llms.gemini.urlopen",
                 {"candidates": [{"content": {"parts": [{"text": response}]}}]},
             ),
             "openai": (
-                "backend.openai_classifier.urlopen",
+                "backend.llms.openai.urlopen",
                 {"choices": [{"message": {"content": response}}]},
             ),
         }

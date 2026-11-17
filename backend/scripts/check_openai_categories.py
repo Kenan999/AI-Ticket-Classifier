@@ -1,10 +1,10 @@
 """Manual nine-category smoke check, not a measure of real-world accuracy.
 
 Preview fictional tickets without making API calls:
-    python -m backend.check_openai_categories
+    python -m backend.scripts.check_openai_categories
 
 Run nine real OpenAI requests with credentials supplied by the process environment:
-    python -m backend.check_openai_categories --live
+    python -m backend.scripts.check_openai_categories --live
 
 No environment files are read. Cases use temporary storage deleted after the run.
 The Flask test client exercises the backend route, not browser/network deployment.
@@ -16,9 +16,9 @@ import os
 from pathlib import Path
 import tempfile
 
-from .config import openai_api_key
-from .llm_classifier import configured_categories
-from .openai_classifier import DEFAULT_OPENAI_MODEL
+from backend.llms.config import openai_api_key
+from backend.llms.gemini import configured_categories
+from backend.llms.openai import DEFAULT_OPENAI_MODEL
 
 
 # Fixed expected labels: never derive the answers from the model's predictions.
@@ -96,7 +96,7 @@ def run_checks():
             # Set before import: backend.app creates its default app on import.
             "REVIEW_CSV_PATH": str(runtime / "reviews.csv"),
         }):
-            from .app import create_app
+            from backend.app import create_app
 
             app = create_app(review_path=runtime / "reviews.csv",
                              case_db_path=runtime / "cases.sqlite")

@@ -14,20 +14,16 @@ import uuid
 
 from flask import Flask, jsonify, request
 
-try:
-    from . import case_storage
-    from .classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
-    from .review import ReviewError, save_review
-    from .config import openai_api_key
-    from .openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
-    from .llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
-except ImportError:  # Supports direct execution: python3 backend/app.py
-    import case_storage
-    from classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
-    from review import ReviewError, save_review
-    from config import openai_api_key
-    from openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
-    from llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
+if __package__ in (None, ""):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from backend.tickets import case_storage
+from backend.classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
+from backend.tickets.review import ReviewError, save_review
+from backend.llms.config import openai_api_key
+from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
+from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
 
 PROVIDERS = ("baseline", "openai", "gemini")
