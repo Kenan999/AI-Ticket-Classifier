@@ -2,7 +2,7 @@
 
 Python backend for an AI-assisted customer-support ticket classifier. It provides a Flask API to receive tickets, classify them with a transparent keyword-based baseline, suggest customer replies, and route uncertain cases for human review. Tickets are stored locally in SQLite, and review decisions are recorded in CSV.
 
-The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The default classifier is rule-based; optional Gemini and OpenAI adapters can be enabled with server-side credentials.** This is a local development backend and is not yet configured for public deployment.
+The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The default classifier is rule-based; optional Gemini and OpenAI adapters can be enabled with server-side credentials.** The backend can run locally or as a separately configured server service; publishing frontend files alone does not start the API.
 
 ## Dataset preparation
 
@@ -318,3 +318,10 @@ and test with `python -m unittest discover -s backend/tests -v`.
 Start the dashboard with `cd backend` then
 `python -m streamlit run evaluation/dashboard.py` so Streamlit loads the backend
 configuration. The dashboard locates the repository and data independently of the working directory.
+
+## Development workflow
+
+Develop and test backend changes on a working branch, keep this root README
+up to date, and open a pull request for review. This is the shared setup and
+operation guide for the backend; detailed topic documentation lives in
+`backend/docs/`. The API and evaluation dashboard run as separate services.
