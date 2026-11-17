@@ -2,8 +2,9 @@
 import json
 import math
 from urllib.request import Request, urlopen
-from evaluation.config import MODEL_LIMITS
+from evaluation.config import MODEL_LIMITS, RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS, BATCH_REQUEST_TIMEOUT_SECONDS
 from evaluation.prompts import render_prompt
+from evaluation.provider_limits import model_limits, RateWindow
 from backend.classifier import CATEGORY_GUIDANCE
 from backend.llm_retry import LLMError, read_provider_response
 
@@ -22,13 +23,13 @@ def instructions(provider, version, categories):
 
 def pack(tickets, prompt, limits):
     """Conservative UTF-8 byte budgeting, NOT an exact tokenizer count."""
-    if (limits.max_tickets < 1 or limits.answer_tokens_per_ticket < 1
+    if ((limits.max_tickets is not None and limits.max_tickets < 1) or limits.answer_tokens_per_ticket < 1
             or limits.input_budget < 1 or limits.reserve_tokens < 0):
         raise ValueError("Invalid batch limits")
     def fits(items):
         input_bound = len(prompt.encode()) + len(encode({"tickets": items}).encode()) + 512
         output = 128 + len(items) * limits.answer_tokens_per_ticket
-        return (len(items) <= limits.max_tickets
+        return ((limits.max_tickets is None or len(items) <= limits.max_tickets)
                 and input_bound <= limits.input_budget
                 and output <= limits.output_tokens
                 and input_bound + output + limits.reserve_tokens <= limits.context_tokens)
@@ -65,7 +66,7 @@ def parse_results(payload, items, categories):
     return [found[item["id"]] for item in items]
 
 def request_batch(items, *, provider, model, api_key, prompt, categories,
-                  limits, timeout, retry_budget, on_attempt=None):
+                  limits, timeout, retry_budget, on_attempt=None, on_headers=None):
     output = 128 + len(items) * limits.answer_tokens_per_ticket
     content = encode({"tickets": items})
     if provider == "openai":
@@ -87,7 +88,16 @@ def request_batch(items, *, provider, model, api_key, prompt, categories,
     def counted_open(*args, **kwargs):
         if on_attempt:
             on_attempt()
-        return urlopen(*args, **kwargs)
+        from urllib.error import HTTPError
+        try:
+            response = urlopen(*args, **kwargs)
+        except HTTPError as exc:
+            if on_headers:
+                on_headers(exc.headers)
+            raise
+        if on_headers:
+            on_headers(response.headers)
+        return response
     try:
         raw = read_provider_response(req, opener=counted_open, timeout=timeout,
               retry_budget=retry_budget, max_bytes=1024*1024, provider=provider)
@@ -107,8 +117,12 @@ def request_batch(items, *, provider, model, api_key, prompt, categories,
         return parse_results(json.loads(text), items, categories)
     except LLMError:
         raise
-    except (OSError, ValueError, KeyError, IndexError, TypeError):
-        raise LLMError("Batch transport or response failed") from None
+    except TimeoutError:
+        raise LLMError("Batch request timed out; no prediction received") from None
+    except OSError:
+        raise LLMError("Batch connection failed; no prediction received") from None
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise LLMError("Batch response could not be decoded or had an invalid structure") from None
 
 def run(tickets, method, env, pause, progress=None):
     provider = method["provider"]
@@ -123,12 +137,15 @@ def run(tickets, method, env, pause, progress=None):
     from backend.llm_classifier import configured_categories
     categories = configured_categories(env.get("LLM_CATEGORIES", ""))
     prompt = instructions(provider, method["prompt_version"], categories)
-    batches = list(pack(tickets, prompt, limits))  # preflight all tickets before any calls
-    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", "6"))
-    timeout = float(env.get("LLM_TIMEOUT_SECONDS", "8"))
-    budget = float(env.get("EVALUATION_RETRY_BUDGET_SECONDS", "120"))
+    list(pack(tickets, prompt, limits))  # reject oversized input before metadata lookup
+    limits, limits_source, metadata_requests = model_limits(provider, model, key, limits)
+    batches = list(pack(tickets, prompt, limits))
+    rate_window = RateWindow()
+    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS))
+    timeout = float(env.get("EVALUATION_BATCH_TIMEOUT_SECONDS", BATCH_REQUEST_TIMEOUT_SECONDS))
+    budget = float(env.get("EVALUATION_RETRY_BUDGET_SECONDS", RETRY_BUDGET_SECONDS))
     if not (math.isfinite(interval) and 0 <= interval <= 600
-            and math.isfinite(timeout) and 1 <= timeout <= 20
+            and math.isfinite(timeout) and 1 <= timeout <= 120
             and math.isfinite(budget) and timeout <= budget <= 600):
         raise ValueError("Invalid evaluation timing configuration")
     results = []
@@ -138,6 +155,7 @@ def run(tickets, method, env, pause, progress=None):
         if progress:
             progress({"completed": len(results), "total": len(tickets),
                       "batches": len(batches), "requests": attempts,
+                      "metadata_requests": metadata_requests, "limits_source": limits_source,
                       "retries": max(0, attempts - started),
                       "errors": sum(bool(row[3]) for row in results)})
     def on_attempt():
@@ -148,11 +166,20 @@ def run(tickets, method, env, pause, progress=None):
     for number, items in enumerate(batches):
         if number and interval:
             pause(interval)
+        needed = len(prompt.encode()) + len(encode({"tickets":items}).encode()) + 640 + len(items)*limits.answer_tokens_per_ticket
+        wait = rate_window.wait_for(needed)
+        if wait > budget:
+            results.extend(("FEHLER", 0.0, provider + ":" + model + ":batch-v1",
+                            "Provider rate-limit reset exceeds evaluation wait budget") for _ in items)
+            emit()
+            continue
+        if wait:
+            pause(wait)
         started += 1
         try:
             answers = request_batch(items, provider=provider, model=model, api_key=key,
                 prompt=prompt, categories=categories, limits=limits,
-                timeout=timeout, retry_budget=budget, on_attempt=on_attempt)
+                timeout=timeout, retry_budget=budget, on_attempt=on_attempt, on_headers=rate_window.observe)
             results.extend((category, confidence, provider + ":" + model + ":batch-v1", "")
                            for category, confidence in answers)
         except LLMError as exc:

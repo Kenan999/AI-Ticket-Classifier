@@ -8,7 +8,10 @@ from backend.llm_retry import LLMError
 
 class BatchTests(unittest.TestCase):
     def setUp(self):
-        self.limits = MODEL_LIMITS[("openai", "gpt-4.1-mini")]
+        self.limits = replace(MODEL_LIMITS[("openai", "gpt-4.1-mini")], max_tickets=20)
+        policy = patch.dict("evaluation.batching.MODEL_LIMITS", {("openai", "gpt-4.1-mini"): self.limits})
+        policy.start()
+        self.addCleanup(policy.stop)
         self.items = [{"id": "0", "text": "hello"}, {"id": "1", "text": "bye"}]
         self.rows = [{"id": "1", "category": "ORDER", "confidence": .8},
                      {"id": "0", "category": "ACCOUNT", "confidence": .9}]
@@ -82,4 +85,46 @@ class BatchTests(unittest.TestCase):
                 {"OPENAI_API_KEY":"test"}, lambda _: None, progress=states.append)
         self.assertEqual(len(result),21)
         self.assertEqual(states[0]["completed"],0)
-        self.assertEqual(states[-1], {"completed":21,"total":21,"batches":2,"requests":4,"retries":2,"errors":0})
+        self.assertEqual(states[-1], {"completed":21,"total":21,"batches":2,"requests":4,"retries":2,"errors":0,"metadata_requests":0,"limits_source":"configured model limits"})
+
+    def test_automatic_size_can_exceed_twenty(self):
+        limits = replace(self.limits, max_tickets=None)
+        batches = list(pack([{"text":"hi"} for _ in range(45)], "prompt", limits))
+        self.assertEqual(len(batches),1)
+
+    def test_live_metadata_and_fallback(self):
+        import io
+        from evaluation.provider_limits import model_limits
+        payload = json.dumps({"inputTokenLimit":8000,"outputTokenLimit":1000}).encode()
+        with patch("evaluation.provider_limits.urlopen", return_value=io.BytesIO(payload)):
+            limits,source,count = model_limits("gemini","test","secret",self.limits)
+        self.assertEqual(limits.input_budget,8000)
+        self.assertEqual(limits.output_tokens,1000)
+        self.assertEqual(count,1)
+        self.assertIn("live",source)
+        with patch("evaluation.provider_limits.urlopen",side_effect=OSError("offline")):
+            limits,source,count = model_limits("gemini","test","secret",self.limits)
+        self.assertEqual(limits,self.limits)
+        self.assertIn("fallback",source)
+
+    def test_rate_headers_wait_only_when_capacity_insufficient(self):
+        from evaluation.provider_limits import RateWindow,duration
+        self.assertEqual(duration("1m2.5s"),62.5)
+        self.assertEqual(duration("250ms"),.25)
+        self.assertIsNone(duration("not a duration"))
+        state = RateWindow()
+        with patch("evaluation.provider_limits.monotonic",return_value=100):
+            state.observe({"x-ratelimit-remaining-tokens":"10","x-ratelimit-reset-tokens":"20s"})
+        with patch("evaluation.provider_limits.monotonic",return_value=105):
+            self.assertEqual(state.wait_for(100),15.25)
+            self.assertEqual(state.wait_for(5),0)
+        state.observe({})
+        self.assertEqual(state.wait_for(100),0)
+
+    def test_transport_errors_are_distinguished(self):
+        for error, message in [(TimeoutError(), "timed out"), (OSError(), "connection failed"),
+                               (ValueError(), "decoded")]:
+            with patch("evaluation.batching.read_provider_response",side_effect=error):
+                with self.assertRaisesRegex(LLMError,message):
+                    request_batch(self.items,provider="openai",model="test",api_key="test",
+                        prompt="p",categories=["ORDER"],limits=self.limits,timeout=60,retry_budget=300)

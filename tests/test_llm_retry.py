@@ -120,3 +120,27 @@ class ProviderRetryTests(unittest.TestCase):
             self.pacing.reset_mock()
             run_evaluation(tickets, provider='baseline')
             self.pacing.assert_not_called()
+
+    def test_evaluation_default_waits_three_minutes_but_remains_bounded(self):
+        from evaluation.config import RETRY_BUDGET_SECONDS
+        self.assertEqual(RETRY_BUDGET_SECONDS, 300)
+        tickets = [{"text": "My account is locked", "expected": "ACCOUNT"}]
+        with patch("evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
+            "backend.llm_classifier.urlopen", side_effect=[
+                provider_error(429, {"error": {"details": [{
+                    "@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "180s"
+                }]}}), success_response("Gemini")
+            ]) as opener:
+            rows = run_evaluation(tickets, provider="gemini-v1")
+        self.assertFalse(rows[0]["error"])
+        self.assertEqual(opener.call_count, 2)
+        self.waits.assert_called_once_with(180)
+        self.waits.reset_mock()
+        with patch("evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
+            "backend.llm_classifier.urlopen", side_effect=provider_error(429, Retry_After="400")
+        ) as opener:
+            rows = run_evaluation(tickets, provider="gemini-v1")
+        self.assertIn("requested 400.0s", rows[0]["error"])
+        self.assertIn("total budget 300.0s", rows[0]["error"])
+        opener.assert_called_once()
+        self.waits.assert_not_called()

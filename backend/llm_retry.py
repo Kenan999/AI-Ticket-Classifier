@@ -93,8 +93,8 @@ def read_provider_response(request, *, opener, timeout, max_bytes, provider, ret
             backoff = 0.5 * 2 ** attempt
             wait = max(delay, backoff + uniform(0, backoff / 2))
             if wait >= deadline - monotonic():
-                raise LLMError(f"{failure}; retry wait exceeds timeout") from error
+                raise LLMError(f"{failure}; retry wait exceeds timeout (requested {wait:.1f}s; total budget {budget:.1f}s)") from error
             sleep(wait)
             remaining = min(timeout, deadline - monotonic())
             if remaining <= 0:
-                raise LLMError(f"{failure}; retry wait exceeds timeout") from error
+                raise LLMError(f"{failure}; retry wait exceeds timeout (requested {wait:.1f}s; total budget {budget:.1f}s)") from error
