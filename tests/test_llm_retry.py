@@ -31,6 +31,9 @@ def success_response(provider):
 
 class ProviderRetryTests(unittest.TestCase):
     def setUp(self):
+        pacing = patch("evaluation.evaluate.sleep")
+        self.addCleanup(pacing.stop)
+        self.pacing = pacing.start()
         self.now = 0
         clock = patch("backend.llm_retry.monotonic", side_effect=lambda: self.now)
         waits = patch("backend.llm_retry.sleep", side_effect=self.advance)
@@ -99,3 +102,21 @@ class ProviderRetryTests(unittest.TestCase):
         self.assertFalse(first["correct"])
         self.assertEqual(second["error"], "")
         self.assertTrue(second["correct"])
+
+
+    def test_batch_budget_allows_long_wait_but_caps_request_timeout(self):
+        for name, classify in [("Gemini", classify_with_gemini), ("OpenAI", classify_with_openai)]:
+            opener = Mock(side_effect=[provider_error(429, Retry_After="60"), success_response(name)])
+            result = classify("My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
+                              opener=opener, retry_budget=120)
+            self.assertEqual(result.category, "ACCOUNT")
+            self.assertEqual(opener.call_args_list[-1].kwargs['timeout'], 8)
+
+    def test_evaluation_paces_cloud_but_not_rules(self):
+        tickets = [{'text':'account', 'expected':'ACCOUNT'}] * 3
+        with patch('evaluation.evaluate.classify_ticket', return_value=('ACCOUNT', .9, 'test', '')), patch('evaluation.evaluate.load_env', return_value={}):
+            run_evaluation(tickets, provider='openai-v1')
+            self.assertEqual(self.pacing.call_args_list, [call(6), call(6)])
+            self.pacing.reset_mock()
+            run_evaluation(tickets, provider='baseline')
+            self.pacing.assert_not_called()

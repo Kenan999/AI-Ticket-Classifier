@@ -20,7 +20,7 @@ MAX_RESPONSE_BYTES = 32 * 1024
 
 
 def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODEL,
-                         timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION):
+                         timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION, retry_budget=None):
     if not api_key or not api_key.strip():
         raise LLMError("OPENAI_API_KEY is not configured")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", model):
@@ -50,7 +50,7 @@ def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODE
     try:
         body = read_provider_response(
             request, opener=urlopen if opener is None else opener,
-            timeout=float(timeout), max_bytes=MAX_RESPONSE_BYTES, provider="OpenAI",
+            timeout=float(timeout), retry_budget=retry_budget, max_bytes=MAX_RESPONSE_BYTES, provider="OpenAI",
         )
         if len(body) > MAX_RESPONSE_BYTES:
             raise LLMError("Provider response exceeded size limit")

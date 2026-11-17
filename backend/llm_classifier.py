@@ -46,7 +46,7 @@ def configured_categories(raw=None):
 
 def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
                          timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION,
-                         instructions=None):
+                         instructions=None, retry_budget=None):
     """Return a validated classification; raise LLMError for any bad response.
 
     Callers can supply a rendered system prompt through instructions.
@@ -87,7 +87,7 @@ def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
     try:
         body = read_provider_response(
             req, opener=urlopen if opener is None else opener,
-            timeout=float(timeout), max_bytes=MAX_RESPONSE_BYTES, provider="Gemini",
+            timeout=float(timeout), retry_budget=retry_budget, max_bytes=MAX_RESPONSE_BYTES, provider="Gemini",
         )
         if len(body) > MAX_RESPONSE_BYTES:
             raise LLMError("Provider response exceeded size limit")

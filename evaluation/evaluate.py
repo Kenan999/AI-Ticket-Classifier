@@ -1,3 +1,5 @@
+import math
+from time import sleep
 """Evaluation des Ticket-Klassifikators am Bitext-Datensatz.
 
 Ground Truth sind die Labels aus data/processed/ - sie sind die
@@ -103,6 +105,8 @@ ENV_KEYS = (
     "GEMINI_MODEL",
     "OPENAI_API_KEY",
     "OPENAI_MODEL",
+    "EVALUATION_RETRY_BUDGET_SECONDS",
+    "EVALUATION_REQUEST_INTERVAL_SECONDS",
     "LLM_TIMEOUT_SECONDS",
     "LLM_CATEGORIES",
 )
@@ -281,6 +285,7 @@ def classify_ticket(text, provider=BASELINE, env=None):
             categories=categories,
             model=env.get(f"{prefix}_MODEL", default_model),
             timeout=float(env.get("LLM_TIMEOUT_SECONDS", "8")),
+            retry_budget=float(env.get("EVALUATION_RETRY_BUDGET_SECONDS", "120")),
             **prompt_options,
         )
     except (LLMError, ValueError, OverflowError) as exc:
@@ -299,8 +304,13 @@ def run_evaluation(tickets, provider=BASELINE):
     env = load_env() if provider != BASELINE else {}
     prompt_version = PROVIDERS[provider].get("prompt_version", "")
     mapping = category_to_label()
+    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", "6")) if provider != BASELINE else 0
+    if not math.isfinite(interval) or not 0 <= interval <= 600:
+        raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     results = []
     for ticket in tickets:
+        if results and interval:
+            sleep(interval)
         category, confidence, model_version, error = classify_ticket(
             ticket["text"], provider=provider, env=env,
         )
