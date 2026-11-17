@@ -146,7 +146,7 @@ def mode_number(mode):
     return list(MODES).index(mode) + 1
 
 
-def results_path(provider, mode):
+def results_path(provider, mode, *, batch=False):
     """Ergebnisdatei: je Verfahren und Modus eine eigene.
 
     Beispiel: smoke + Regeln -> results/evaluation/01_smoke_v0.csv.
@@ -155,6 +155,8 @@ def results_path(provider, mode):
     Ergebnis eines anderen.
     """
     suffix = PROVIDERS[provider]["suffix"]
+    if batch and provider != BASELINE:
+        suffix += "_batch_v1"
     return RESULTS_DIR / f"{mode_number(mode):02d}_{mode}_{suffix}.csv"
 
 
@@ -295,7 +297,7 @@ def classify_ticket(text, provider=BASELINE, env=None):
             prediction.model_version, "")
 
 
-def run_evaluation(tickets, provider=BASELINE):
+def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
     """Misst alle Tickets mit dem gewaehlten Verfahren.
 
     Ground Truth ist das Label des Datensatzes, die Antwort des
@@ -307,13 +309,17 @@ def run_evaluation(tickets, provider=BASELINE):
     interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", "6")) if provider != BASELINE else 0
     if not math.isfinite(interval) or not 0 <= interval <= 600:
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
+    batched = None
+    if batch and provider != BASELINE:
+        from evaluation.batching import run
+        batched = iter(run(tickets, PROVIDERS[provider], env, sleep, progress=progress))
     results = []
     for ticket in tickets:
-        if results and interval:
+        if batched is None and results and interval:
             sleep(interval)
-        category, confidence, model_version, error = classify_ticket(
+        category, confidence, model_version, error = (next(batched) if batched is not None else classify_ticket(
             ticket["text"], provider=provider, env=env,
-        )
+        ))
         predicted = to_dataset_label(category, mapping)
         results.append({
             "ticket_id": ticket.get("ticket_id", ""),
@@ -528,7 +534,7 @@ def main(argv=None):
     tickets, info = load_mode_tickets(mode)
     print_sample_info(info)
 
-    results = run_evaluation(tickets=tickets, provider=provider)
+    results = run_evaluation(tickets=tickets, provider=provider, batch=True)
 
     # Einzelne Tickets nur bei kleinen Laeufen ausgeben, sonst
     # verschwinden die Kennzahlen in hunderten Zeilen.
@@ -547,7 +553,7 @@ def main(argv=None):
 
     print_metrics(results)
 
-    path = save_results(results, results_path(provider, mode))
+    path = save_results(results, results_path(provider, mode, batch=True))
     print()
     print(f"Gespeichert: {path.relative_to(PROJECT_ROOT)}")
 
