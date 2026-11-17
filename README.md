@@ -235,3 +235,18 @@ disable execution and display no results. Local rules skip prompt selection.
 Test selection keeps the established dataset sizes and result filenames, so existing
 results remain available without mixing test datasets. Changing controls does not run
 an evaluation; only the run button starts it.
+
+
+### Evaluation rate-limit handling
+
+The application and evaluations share the same provider retry helper (at most two
+retries). App requests retain their short request-timeout budget. Evaluations use
+`EVALUATION_RETRY_BUDGET_SECONDS=120` as the total per-ticket budget, while each
+network attempt still uses `LLM_TIMEOUT_SECONDS`. Evaluations wait six seconds
+between cloud tickets by default (`EVALUATION_REQUEST_INTERVAL_SECONDS=6`). These
+evaluation settings can be set in the process environment or private backend .env.
+Rules are not delayed. Provider Retry-After instructions are respected when they
+fit the budget; exhausted quotas still fail immediately. Failures remain explicit
+in each result's error field, never replaced with local-rule predictions. Pacing
+is per evaluation process, not an account-wide quota guarantee. Avoid concurrent
+runs using the same provider key. Existing result files are not changed by this.

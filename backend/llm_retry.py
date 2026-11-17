@@ -3,6 +3,7 @@
 from email.utils import parsedate_to_datetime
 from http.client import HTTPException
 import json
+import math
 from random import uniform
 from time import monotonic, sleep, time
 from urllib.error import HTTPError
@@ -62,9 +63,12 @@ def _rate_limit_details(response):
     return False, max([0.0, *delays])
 
 
-def read_provider_response(request, *, opener, timeout, max_bytes, provider):
-    """Read the response, using the original timeout as the retry budget."""
-    deadline = monotonic() + timeout
+def read_provider_response(request, *, opener, timeout, max_bytes, provider, retry_budget=None):
+    """Read the response, using a bounded total budget; app defaults retain the request timeout."""
+    budget = timeout if retry_budget is None else float(retry_budget)
+    if not math.isfinite(budget) or not timeout <= budget <= 600:
+        raise LLMError("Retry budget must be between request timeout and 600 seconds")
+    deadline = monotonic() + budget
     remaining = timeout
     for attempt in range(MAX_RETRIES + 1):
         try:
@@ -91,6 +95,6 @@ def read_provider_response(request, *, opener, timeout, max_bytes, provider):
             if wait >= deadline - monotonic():
                 raise LLMError(f"{failure}; retry wait exceeds timeout") from error
             sleep(wait)
-            remaining = deadline - monotonic()
+            remaining = min(timeout, deadline - monotonic())
             if remaining <= 0:
                 raise LLMError(f"{failure}; retry wait exceeds timeout") from error
