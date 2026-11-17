@@ -24,7 +24,7 @@ except ImportError:  # direct execution: python3 backend/app.py
 from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
-DEFAULT_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
 MAX_RESPONSE_BYTES = 32 * 1024
 
 

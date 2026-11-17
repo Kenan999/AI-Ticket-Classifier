@@ -1,4 +1,4 @@
-# Optional LLM-based Ticket Classification (IHK-028)
+# Optional LLM-based Ticket Classification
 
 This integration is part of the **Backend development branch**, not the live
 website. `GET /providers` lists the available provider IDs, display labels,
