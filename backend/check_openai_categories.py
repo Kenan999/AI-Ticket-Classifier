@@ -17,8 +17,8 @@ from pathlib import Path
 import tempfile
 
 from .config import openai_api_key
-from .llm_classifier import configured_categories
-from .openai_classifier import DEFAULT_OPENAI_MODEL
+from .llms.gemini import configured_categories
+from .llms.openai import DEFAULT_OPENAI_MODEL
 
 
 # Fixed expected labels: never derive the answers from the model's predictions.

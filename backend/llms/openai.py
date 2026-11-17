@@ -4,16 +4,10 @@ import re
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-try:
-    from .classifier import CATEGORY_GUIDANCE, PredictionResult
-    from .llm_classifier import configured_categories
-    from .llm_retry import LLMError, read_provider_response
-except ImportError:
-    from classifier import CATEGORY_GUIDANCE, PredictionResult
-    from llm_classifier import configured_categories
-    from llm_retry import LLMError, read_provider_response
-
-from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from backend.classifier import CATEGORY_GUIDANCE, PredictionResult
+from .gemini import configured_categories
+from .retry import LLMError, read_provider_response
+from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
 MAX_RESPONSE_BYTES = 32 * 1024

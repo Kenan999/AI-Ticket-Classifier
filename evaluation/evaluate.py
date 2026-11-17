@@ -33,16 +33,16 @@ import pandas as pd
 from backend import classifier as backend_classifier
 from backend.classifier import dataset_label_for, predict_ticket
 from backend.data_loader import load_dataset
-from backend.llm_classifier import (
+from backend.llms.gemini import (
     DEFAULT_MODEL,
     LLMError,
     classify_with_gemini,
     configured_categories,
 )
 
-from backend.openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
+from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from evaluation.config import RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS
-from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES, render_prompt
+from backend.llms.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES, render_prompt
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"

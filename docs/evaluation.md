@@ -12,7 +12,7 @@ The evaluation lives in `evaluation/` and only ever *reads* the backend:
 
 It imports `predict_ticket` and `dataset_label_for` from
 `backend/classifier.py`, `load_dataset` from `backend/data_loader.py` and
-`classify_with_gemini` from `backend/llm_classifier.py`. No backend file is
+`classify_with_gemini` from `backend/llms/gemini.py`. No backend file is
 modified, no Flask app is started and no SQLite database is touched. The
 dataset CSVs are read only — the sampling happens in memory, so no extra
 dataset file is ever written.
@@ -134,7 +134,7 @@ Two notes for whoever works on it next:
 
 ## Prompt versions V1–V3
 
-`evaluation/prompts.py` is the shared source for both adapters. V1 is the
+`backend/llms/prompts.py` is the shared source for both adapters. V1 is the
 backend default. V2 and V3 initially use the same wording as V1, so they only
 become distinct experiments after you edit their templates. The configured
 nine-label list and shared category guidance from `backend/classifier.py`

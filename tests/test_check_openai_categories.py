@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 from backend import check_openai_categories as smoke
 from backend.classifier import PredictionResult
-from backend.llm_classifier import LLMError
+from backend.llms.gemini import LLMError
 
 
 class CategorySmokeTests(unittest.TestCase):
@@ -56,7 +56,7 @@ class CategorySmokeTests(unittest.TestCase):
             "REVIEW_CSV_PATH": "original-review-path",
         }):
             with patch.object(app_module, "create_app", side_effect=capture_factory):
-                with patch("backend.openai_classifier.urlopen", side_effect=model_response) as network:
+                with patch("backend.llms.openai.urlopen", side_effect=model_response) as network:
                     results = smoke.run_checks()
                 self.assertEqual(network.call_count, 9)
                 self.assertTrue(all(result.passed for result in results))

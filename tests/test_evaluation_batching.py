@@ -4,7 +4,7 @@ from dataclasses import replace
 from unittest.mock import patch
 from evaluation.batching import pack, parse_results, request_batch, run
 from evaluation.config import MODEL_LIMITS
-from backend.llm_retry import LLMError
+from backend.llms.retry import LLMError
 
 class BatchTests(unittest.TestCase):
     def setUp(self):

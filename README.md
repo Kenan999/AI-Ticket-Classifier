@@ -75,7 +75,7 @@ python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
 ```
 
 Gemini and OpenAI reuse their backend adapters and the shared system prompts
-in `evaluation/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
+in `backend/llms/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
 V2 and V3 are empty placeholders for future prompts; selecting either raises a
 not-configured error before any provider call. The dashboard shows a prompt-entry
 message and disables execution for those empty versions.
@@ -302,3 +302,9 @@ Connection, timeout and invalid-response failures are reported separately.
 Runs with only failed requests show unavailable quality metrics rather than
 zero Accuracy/F1, and remain inspectable in the error table. Existing CSVs are
 not changed. Provider quotas still apply and cannot be increased by this code.
+
+## LLM module layout
+
+`backend/llms/` contains `gemini.py`, `openai.py`, shared `prompts.py` and
+`retry.py`. Both the API and evaluation import these modules. The keyword
+baseline remains in `backend/classifier.py`.

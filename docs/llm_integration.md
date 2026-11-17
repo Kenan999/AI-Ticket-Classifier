@@ -99,7 +99,7 @@ is a model estimate, not calibrated accuracy or a probability of correctness.
 Gemini additionally asks for lower confidence on ambiguous tickets.
 
 Both providers load the selected system prompt from
-[`evaluation/prompts.py`](../evaluation/prompts.py). Runtime classification
+[`backend/llms/prompts.py`](../backend/llms/prompts.py). Runtime classification
 uses V1. Evaluation can select V1, V2, or V3 for either provider. All versions
 receive the same canonical labels and category guidance from
 [`backend/classifier.py`](../backend/classifier.py).
