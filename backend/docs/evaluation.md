@@ -11,7 +11,7 @@ The evaluation lives in `backend/evaluation/` and only ever *reads* the backend:
 - `dashboard.py` — Streamlit view of the results
 
 It imports `predict_ticket` and `dataset_label_for` from
-`backend/classifier.py`, `load_dataset` from `backend/data_loader.py` and
+`backend/classifier.py`, `load_dataset` from `backend/data/data_loader.py` and
 `classify_with_gemini` from `backend/llms/gemini.py`. No backend file is
 modified, no Flask app is started and no SQLite database is touched. The
 dataset CSVs are read only — the sampling happens in memory, so no extra
@@ -20,7 +20,7 @@ dataset file is ever written.
 ## Test data
 
 The prepared Bitext splits in `data/processed/`, produced by
-`python backend/prepare_data.py`. Nine labels, 200 rows per label in both
+`python backend/data/prepare_data.py`. Nine labels, 200 rows per label in both
 `validation.csv` and `test.csv` (1,800 rows each). The evaluation only ever
 reads them.
 

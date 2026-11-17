@@ -6,7 +6,7 @@ The project also includes Bitext dataset download, loading, and preprocessing mo
 
 ## Dataset preparation
 
-After installing `backend/requirements.txt`, run `python backend/prepare_data.py` once
+After installing `backend/requirements.txt`, run `python backend/data/prepare_data.py` once
 at setup/deployment. It downloads and SHA-256-verifies the pinned Bitext CSV,
 then prepares `data/processed/train.csv`, `validation.csv`, and `test.csv`.
 Repeated runs verify the source and skip unchanged processed outputs. Run this
@@ -48,7 +48,7 @@ Install dependencies with `python -m pip install -r backend/requirements.txt` an
 
 `backend/evaluation/` measures the classifier against the prepared Bitext splits. It
 imports the backend directly — no API, database or frontend — and never
-modifies backend files or the dataset. Run `python backend/prepare_data.py`
+modifies backend files or the dataset. Run `python backend/data/prepare_data.py`
 first; the evaluation reads `data/processed/` and nothing else.
 
 The **dataset labels are the ground truth**. Predictions use the exact
@@ -325,3 +325,9 @@ Develop and test backend changes on a working branch, keep this root README
 up to date, and open a pull request for review. This is the shared setup and
 operation guide for the backend; detailed topic documentation lives in
 `backend/docs/`. The API and evaluation dashboard run as separate services.
+
+## Data modules
+
+`backend/data/` groups download, CSV loading, preprocessing and setup orchestration.
+The loader reads raw or processed CSV files and returns `ticket_id`, `text`, and
+`label`; it does not download data. Runtime datasets remain under root `data/`.

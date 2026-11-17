@@ -32,7 +32,7 @@ import pandas as pd
 
 from backend import classifier as backend_classifier
 from backend.classifier import dataset_label_for, predict_ticket
-from backend.data_loader import load_dataset
+from backend.data.data_loader import load_dataset
 from backend.llms.gemini import (
     DEFAULT_MODEL,
     LLMError,
