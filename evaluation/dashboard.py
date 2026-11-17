@@ -77,15 +77,6 @@ VERSIONS = [
             "in backend/classifier.py."
         ),
     },
-    {
-        "key": "GEMINI",
-        "short": "Gemini · Standard",
-        "provider": GEMINI,
-        "tint": "#fdf6e6",
-        "ink": "#8a6100",
-        "approach": "Gemini mit der Backend-Standardversion",
-        "prompt": "Die Standardversion ist in evaluation/prompts.py festgelegt.",
-    },
     *(
         {
             "key": key,
@@ -249,7 +240,7 @@ def render_sidebar():
         st.header("Steuerung")
         provider = st.selectbox(
             "Verfahren",
-            options=list(PROVIDERS),
+            options=[key for key in PROVIDERS if key != GEMINI],
             format_func=lambda key: PROVIDERS[key]["label"],
             help=(
                 "Regeln laufen offline. Gemini und OpenAI senden Tickets "

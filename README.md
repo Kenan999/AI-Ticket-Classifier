@@ -75,8 +75,9 @@ python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
 ```
 
 Gemini and OpenAI reuse their backend adapters and the shared system prompts
-in `evaluation/prompts.py`. V1 is the backend default. V2 and V3 start with the
-same wording and can be edited independently. Select a version with
+in `evaluation/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
+V2 and V3 are empty placeholders for future prompts; selecting either raises a
+not-configured error before any provider call. Select a version with
 `--provider gemini-v1` through `gemini-v3`, or `openai-v1` through `openai-v3`.
 Set the matching `GEMINI_API_KEY` or `OPENAI_API_KEY` in the process environment
 or `backend/.env`. A final run makes 1,800 requests to the selected provider.
@@ -129,6 +130,9 @@ backend development copy: frontend controls and deployment gateway routing for
 The automated tests simulate cloud responses and do not validate live API access.
 The `Backend` branch is for development; push, open a PR, test/review and merge
 into `main` for the existing deployment workflow. This checkout is not live.
+
+The evaluation dashboard shows the rule baseline and explicit Gemini/OpenAI
+V1–V3 entries. The duplicate Gemini Standard option is omitted.
 
 ## Shoply frontend
 
