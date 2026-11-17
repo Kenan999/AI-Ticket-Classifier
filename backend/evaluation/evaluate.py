@@ -17,10 +17,10 @@ unter results/evaluation/, zum Beispiel smoke_v0.csv.
 Das Backend und der Datensatz werden nur gelesen, nie veraendert.
 
 Starten aus dem Projekt-Root:
-    python3 -m evaluation.evaluate                        # smoke
-    python3 -m evaluation.evaluate --mode validation
-    python3 -m evaluation.evaluate --mode final
-    python3 -m evaluation.evaluate --provider gemini
+    python3 -m backend.evaluation.evaluate                        # smoke
+    python3 -m backend.evaluation.evaluate --mode validation
+    python3 -m backend.evaluation.evaluate --mode final
+    python3 -m backend.evaluation.evaluate --provider gemini
 """
 
 import argparse
@@ -41,10 +41,10 @@ from backend.llms.gemini import (
 )
 
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
-from evaluation.config import RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS
+from backend.evaluation.config import RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS
 from backend.llms.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES, render_prompt
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"
 ENV_PATH = PROJECT_ROOT / "backend" / ".env"
 DATA_DIR = PROJECT_ROOT / "data" / "processed"
@@ -313,7 +313,7 @@ def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None
     if batch and provider != BASELINE:
-        from evaluation.batching import run
+        from backend.evaluation.batching import run
         batched = iter(run(tickets, PROVIDERS[provider], env, sleep, progress=progress))
     results = []
     for ticket in tickets:

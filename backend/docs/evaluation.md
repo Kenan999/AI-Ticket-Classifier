@@ -5,7 +5,7 @@ still missing. For commands, see the Evaluation section in the README.
 
 ## Scope
 
-The evaluation lives in `evaluation/` and only ever *reads* the backend:
+The evaluation lives in `backend/evaluation/` and only ever *reads* the backend:
 
 - `evaluate.py` — sampling, measurement, metrics, CSV export
 - `dashboard.py` — Streamlit view of the results
@@ -115,7 +115,7 @@ Evaluation sends Bitext dataset texts to the selected provider.
 
 ## Dashboard
 
-`python -m streamlit run evaluation/dashboard.py` shows the KPIs for the
+`(cd backend && python -m streamlit run evaluation/dashboard.py)` shows the KPIs for the
 selected provider and mode, per-label results across versions, a comparison
 chart with target lines (set in `dashboard.py`, not yet agreed in the team),
 the prompt behind each version, all tickets and the misclassifications.

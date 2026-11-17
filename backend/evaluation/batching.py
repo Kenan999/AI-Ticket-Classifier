@@ -2,9 +2,9 @@
 import json
 import math
 from urllib.request import Request, urlopen
-from evaluation.config import MODEL_LIMITS, RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS, BATCH_REQUEST_TIMEOUT_SECONDS
+from backend.evaluation.config import MODEL_LIMITS, RETRY_BUDGET_SECONDS, REQUEST_INTERVAL_SECONDS, BATCH_REQUEST_TIMEOUT_SECONDS
 from backend.llms.prompts import render_prompt
-from evaluation.provider_limits import model_limits, RateWindow
+from backend.evaluation.provider_limits import model_limits, RateWindow
 from backend.classifier import CATEGORY_GUIDANCE
 from backend.llms.retry import LLMError, read_provider_response
 

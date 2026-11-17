@@ -114,7 +114,7 @@ SHA-256 of the files (seed 42, 200 per label):
 - `validation.csv`: `c584d55070cc8ae42ccec4ad17450035cc2e9b3d2c3e99aee12bbcd51a839a0d`
 - `test.csv`: `c1222c8704f11004d8bea3c012a18910743f3767e71bb548deee4094c62ebd23`
 
-The checksums were produced with the library versions in `requirements.txt` (pandas 3.1.1). With other versions, the random shuffle may differ.
+The checksums were produced with the library versions in `backend/requirements.txt` (pandas 3.1.1). With other versions, the random shuffle may differ.
 
 How to reproduce:
 

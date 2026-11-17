@@ -10,7 +10,7 @@ Die Kennzahlen werden mit den Funktionen aus evaluation/evaluate.py
 berechnet, damit Dashboard und Konsole immer dieselben Werte zeigen.
 
 Starten aus dem Projekt-Root:
-    python -m streamlit run evaluation/dashboard.py
+    (cd backend && python -m streamlit run evaluation/dashboard.py)
 """
 
 import difflib
@@ -27,9 +27,9 @@ import streamlit as st
 # Streamlit startet diese Datei direkt, deshalb kennt Python den
 # Projekt-Root nicht automatisch. Ohne diese Zeile schlaegt der Import
 # von evaluation.evaluate fehl.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from evaluation.evaluate import (  # noqa: E402
+from backend.evaluation.evaluate import (  # noqa: E402
     BASELINE,
     GEMINI,
     MODES,
@@ -280,7 +280,7 @@ def render_sidebar():
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
         provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
         if engine != BASELINE:
-            from evaluation.evaluate import load_env
+            from backend.evaluation.evaluate import load_env
             from backend.llms.gemini import DEFAULT_MODEL
             active_model = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else "gpt-4.1-mini")
             st.caption(f"Modell für neue Tests: {active_model}")

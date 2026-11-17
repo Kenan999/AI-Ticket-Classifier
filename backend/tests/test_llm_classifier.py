@@ -14,7 +14,7 @@ from backend.llms.gemini import (
     DEFAULT_CATEGORIES, LLMError, classify_with_gemini, configured_categories,
 )
 
-from evaluation.evaluate import classify_ticket
+from backend.evaluation.evaluate import classify_ticket
 from backend.llms.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, render_prompt
 
 
