@@ -9,10 +9,13 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from backend.app import create_app
-from backend.classifier import MODEL_VERSION
+from backend.classifier import CATEGORY_GUIDANCE, MODEL_VERSION
 from backend.llm_classifier import (
     DEFAULT_CATEGORIES, LLMError, classify_with_gemini, configured_categories,
 )
+
+from evaluation.evaluate import classify_ticket
+from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, render_prompt
 
 
 class MockResponse:
@@ -61,7 +64,11 @@ class GeminiTests(unittest.TestCase):
             self.assertEqual(timeout, 8)
             body = json.loads(req.data)
             self.assertEqual(body["generationConfig"]["responseMimeType"], "application/json")
-            self.assertIn("SHIPPING", body["systemInstruction"]["parts"][0]["text"])
+            default_prompt = render_prompt(
+                DEFAULT_PROMPT_VERSION, "gemini", DEFAULT_CATEGORIES,
+                category_guidance=CATEGORY_GUIDANCE,
+            )
+            self.assertEqual(body["systemInstruction"]["parts"][0]["text"], default_prompt)
             self.assertIn("package is delayed", body["contents"][0]["parts"][0]["text"])
             return MockResponse(gemini_output("SHIPPING", 0.89))
 
@@ -72,6 +79,55 @@ class GeminiTests(unittest.TestCase):
         self.assertEqual(result.category, "SHIPPING")
         self.assertEqual(result.confidence, 0.89)
         self.assertEqual(result.model_version, "gemini:gemini-3.1-flash-lite")
+
+    def test_supplied_instructions_are_sent_verbatim(self):
+        instructions = "First line.\nSecond line. "
+
+        def fake_open(req, timeout):
+            body = json.loads(req.data)
+            self.assertEqual(body["systemInstruction"]["parts"][0]["text"], instructions)
+            self.assertEqual(json.loads(body["contents"][0]["parts"][0]["text"]),
+                             {"ticket": "My account is locked"})
+            return MockResponse(gemini_output("ACCOUNT", 0.8))
+
+        with patch("backend.llm_classifier.render_prompt") as render_default:
+            result = classify_with_gemini(
+                "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
+                instructions=instructions, opener=fake_open,
+            )
+        render_default.assert_not_called()
+        self.assertEqual(result.category, "ACCOUNT")
+
+    def test_invalid_supplied_instructions_are_rejected_before_request(self):
+        for instructions in ("", " \n", 42):
+            with self.subTest(instructions=instructions), patch("backend.llm_classifier.urlopen") as opener:
+                with self.assertRaises(LLMError):
+                    classify_with_gemini(
+                        "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
+                        instructions=instructions,
+                    )
+                opener.assert_not_called()
+
+    def test_evaluation_uses_the_selected_gemini_prompt(self):
+        for version in ("V1", "V2", "V3"):
+            template = f"{version} example for {{categories}}."
+            with self.subTest(version=version), patch.dict(PROMPTS[version], {"gemini": template}):
+                expected = render_prompt(
+                    version, "gemini", DEFAULT_CATEGORIES, category_guidance=CATEGORY_GUIDANCE,
+                )
+                with patch("backend.llm_classifier.urlopen") as opener, patch(
+                    "backend.llm_classifier.render_prompt",
+                ) as render_default:
+                    opener.return_value = MockResponse(gemini_output("ACCOUNT", 0.8))
+                    category, _, _, error = classify_ticket(
+                        "My account is locked", provider=f"gemini-{version.lower()}",
+                        env={"GEMINI_API_KEY": "test"},
+                    )
+                request = opener.call_args.args[0]
+                body = json.loads(request.data)
+                self.assertEqual(body["systemInstruction"]["parts"][0]["text"], expected)
+                render_default.assert_not_called()
+                self.assertEqual((category, error), ("ACCOUNT", ""))
 
     def test_refund_category(self):
         result = classify_with_gemini(

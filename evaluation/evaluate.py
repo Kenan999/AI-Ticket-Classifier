@@ -39,7 +39,7 @@ from backend.llm_classifier import (
 )
 
 from backend.openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
-from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES
+from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, PROVIDER_NAMES, render_prompt
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results" / "evaluation"
@@ -268,13 +268,20 @@ def classify_ticket(text, provider=BASELINE, env=None):
 
     try:
         categories = configured_categories(env.get("LLM_CATEGORIES", ""))
+        prompt_version = method["prompt_version"]
+        prompt_options = {"prompt_version": prompt_version}
+        if name == GEMINI:
+            prompt_options["instructions"] = render_prompt(
+                prompt_version, name, categories,
+                category_guidance=backend_classifier.CATEGORY_GUIDANCE,
+            )
         prediction = adapter(
             text,
             api_key=api_key,
             categories=categories,
             model=env.get(f"{prefix}_MODEL", default_model),
             timeout=float(env.get("LLM_TIMEOUT_SECONDS", "8")),
-            prompt_version=method["prompt_version"],
+            **prompt_options,
         )
     except (LLMError, ValueError, OverflowError) as exc:
         # Nie den Tickettext oder den Key mit ausgeben.

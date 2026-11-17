@@ -47,9 +47,12 @@ def configured_categories(raw=None):
 
 
 def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
-                         timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION):
+                         timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION,
+                         instructions=None):
     """Return a validated classification; raise LLMError for any bad response.
 
+    Callers can supply a rendered system prompt through instructions.
+    Otherwise, render the requested version from the shared registry.
     The confidence is a *model-reported estimate*, NOT a calibrated probability.
     """
     if not api_key or not api_key.strip():
@@ -59,9 +62,12 @@ def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
     if not 1 <= float(timeout) <= 20:
         raise LLMError("LLM timeout must be 1–20 seconds")
     categories = configured_categories(",".join(categories))
-    instructions = render_prompt(
-        prompt_version, "gemini", categories, category_guidance=CATEGORY_GUIDANCE,
-    )
+    if instructions is None:
+        instructions = render_prompt(
+            prompt_version, "gemini", categories, category_guidance=CATEGORY_GUIDANCE,
+        )
+    elif not isinstance(instructions, str) or not instructions.strip():
+        raise LLMError("Gemini instructions must be a non-empty string")
     payload = {
         "systemInstruction": {"parts": [{"text": instructions}]},
         "contents": [{"role": "user", "parts": [{"text": json.dumps({"ticket": text})}]}],
