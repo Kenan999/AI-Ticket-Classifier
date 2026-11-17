@@ -432,6 +432,20 @@ def for_display(rows):
     return pd.DataFrame(cleaned)
 
 
+def confusion_matrix(results):
+    """Count the tickets for every pair of true label and predicted label.
+
+    Rows are the true labels, columns are the model's answers. The labels
+    come first in sorted order. Answers that are not a label (for example
+    "[FEHLER]" for a failed request) get a column of their own after them.
+    """
+    labels = sorted({row["expected"] for row in results})
+    frame = pd.DataFrame(results)
+    others = sorted(set(frame["predicted"]) - set(labels))
+    counts = pd.crosstab(frame["expected"], frame["predicted"])
+    return counts.reindex(index=labels, columns=labels + others, fill_value=0)
+
+
 def version_metrics(version, mode=None):
     """Kennzahlen einer Version fuer die gewaehlte Datenquelle.
 
@@ -764,6 +778,14 @@ def main():
         st.dataframe(for_display(errors), width="stretch")
     else:
         st.info("Keine Fehlklassifikationen.")
+
+    st.subheader("Confusion-Matrix")
+    st.caption(
+        "Zeilen: richtige Kategorie, Spalten: Antwort des Modells. "
+        "Die Diagonale zeigt die richtigen Antworten. "
+        "[FEHLER] bedeutet: Die Anfrage an das Modell ist fehlgeschlagen."
+    )
+    st.dataframe(confusion_matrix(results), width="stretch")
 
     render_backlog()
 
