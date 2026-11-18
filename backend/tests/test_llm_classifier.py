@@ -10,12 +10,12 @@ from urllib.error import URLError
 
 from backend.app import create_app
 from backend.classifier import CATEGORY_GUIDANCE, MODEL_VERSION
-from backend.llm_classifier import (
+from backend.llms.gemini import (
     DEFAULT_CATEGORIES, LLMError, classify_with_gemini, configured_categories,
 )
 
-from evaluation.evaluate import classify_ticket
-from evaluation.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, render_prompt
+from backend.evaluation.evaluate import classify_ticket
+from backend.llms.prompts import DEFAULT_PROMPT_VERSION, PROMPTS, render_prompt
 
 
 class MockResponse:
@@ -59,7 +59,7 @@ class GeminiTests(unittest.TestCase):
     def test_gemini_request_and_json_output(self):
         def fake_open(req, timeout):
             self.assertEqual(req.get_method(), "POST")
-            self.assertIn("gemini-3.1-flash-lite:generateContent", req.full_url)
+            self.assertIn("gemini-3.5-flash-lite:generateContent", req.full_url)
             self.assertEqual(req.get_header("X-goog-api-key"), "test-only-key")
             self.assertEqual(timeout, 8)
             body = json.loads(req.data)
@@ -78,7 +78,7 @@ class GeminiTests(unittest.TestCase):
         )
         self.assertEqual(result.category, "SHIPPING")
         self.assertEqual(result.confidence, 0.89)
-        self.assertEqual(result.model_version, "gemini:gemini-3.1-flash-lite")
+        self.assertEqual(result.model_version, "gemini:gemini-3.5-flash-lite")
 
     def test_supplied_instructions_are_sent_verbatim(self):
         instructions = "First line.\nSecond line. "
@@ -90,7 +90,7 @@ class GeminiTests(unittest.TestCase):
                              {"ticket": "My account is locked"})
             return MockResponse(gemini_output("ACCOUNT", 0.8))
 
-        with patch("backend.llm_classifier.render_prompt") as render_default:
+        with patch("backend.llms.gemini.render_prompt") as render_default:
             result = classify_with_gemini(
                 "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
                 instructions=instructions, opener=fake_open,
@@ -100,7 +100,7 @@ class GeminiTests(unittest.TestCase):
 
     def test_invalid_supplied_instructions_are_rejected_before_request(self):
         for instructions in ("", " \n", 42):
-            with self.subTest(instructions=instructions), patch("backend.llm_classifier.urlopen") as opener:
+            with self.subTest(instructions=instructions), patch("backend.llms.gemini.urlopen") as opener:
                 with self.assertRaises(LLMError):
                     classify_with_gemini(
                         "My account is locked", api_key="test", categories=DEFAULT_CATEGORIES,
@@ -115,8 +115,8 @@ class GeminiTests(unittest.TestCase):
                 expected = render_prompt(
                     version, "gemini", DEFAULT_CATEGORIES, category_guidance=CATEGORY_GUIDANCE,
                 )
-                with patch("backend.llm_classifier.urlopen") as opener, patch(
-                    "backend.llm_classifier.render_prompt",
+                with patch("backend.llms.gemini.urlopen") as opener, patch(
+                    "backend.llms.gemini.render_prompt",
                 ) as render_default:
                     opener.return_value = MockResponse(gemini_output("ACCOUNT", 0.8))
                     category, _, _, error = classify_ticket(
@@ -181,12 +181,12 @@ class GeminiTests(unittest.TestCase):
             result = response.json
             self.assertEqual(result["category"], "ACCOUNT")
             self.assertEqual(result["status"], "classified")
-            self.assertEqual(result["model_version"], "gemini:gemini-3.1-flash-lite")
+            self.assertEqual(result["model_version"], "gemini:gemini-3.5-flash-lite")
             self.assertFalse(result["reply_confirmed"])
             self.assertEqual(app.test_client().get("/case/" + result["ticket_id"]).json["category"], "ACCOUNT")
 
     def test_five_mvp_examples_through_backend_using_mock_model(self):
-        # Five distinct categories from IHK-028; no real API access or billing.
+        # Five distinct categories; no real API access or billing.
         examples = (
             ("My parcel has not arrived and tracking is stuck.", "DELIVERY"),
             ("I returned my shoes and need a refund.", "REFUND"),

@@ -10,9 +10,11 @@ Die Kennzahlen werden mit den Funktionen aus evaluation/evaluate.py
 berechnet, damit Dashboard und Konsole immer dieselben Werte zeigen.
 
 Starten aus dem Projekt-Root:
-    python -m streamlit run evaluation/dashboard.py
+    (cd backend && python -m streamlit run evaluation/dashboard.py)
 """
 
+import difflib
+import re
 import sys
 from datetime import datetime
 from html import escape
@@ -25,9 +27,9 @@ import streamlit as st
 # Streamlit startet diese Datei direkt, deshalb kennt Python den
 # Projekt-Root nicht automatisch. Ohne diese Zeile schlaegt der Import
 # von evaluation.evaluate fehl.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from evaluation.evaluate import (  # noqa: E402
+from backend.evaluation.evaluate import (  # noqa: E402
     BASELINE,
     GEMINI,
     MODES,
@@ -85,7 +87,7 @@ VERSIONS = [
             "tint": "#fdf0ea" if method["provider"] == GEMINI else "#f0eefc",
             "ink": "#a8451c" if method["provider"] == GEMINI else "#5541a6",
             "approach": "Versionierter System-Prompt",
-            "prompt": "Prompt-Text in evaluation/prompts.py.",
+            "prompt": "Prompt-Text in backend/llms/prompts.py.",
         }
         for key, method in PROVIDERS.items()
         if key not in {BASELINE, GEMINI}
@@ -231,7 +233,7 @@ def mode_caption(mode):
 
 
 def missing_prompt_message(provider):
-    from evaluation.prompts import PROMPTS
+    from backend.llms.prompts import PROMPTS
     if provider == BASELINE:
         return None
     method = PROVIDERS[provider]
@@ -239,7 +241,7 @@ def missing_prompt_message(provider):
     template = PROMPTS.get(version, {}).get(method["provider"], "")
     if template.strip():
         return None
-    return f"Bitte zuerst den Prompt für {version} in evaluation/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
+    return f"Bitte zuerst den Prompt für {version} in backend/llms/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
 
 
 def render_sidebar():
@@ -263,7 +265,7 @@ def render_sidebar():
             dataset_error = str(exc)
             st.error(dataset_error)
         prompt_controls = st.container()
-        from evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
+        from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         model_env = load_env()
         active_models = {
             "gemini": model_env.get("GEMINI_MODEL", DEFAULT_MODEL),
@@ -470,6 +472,63 @@ def for_display(rows):
     return pd.DataFrame(cleaned)
 
 
+MATRIX_RAMPS = {
+    "correct": ((232, 245, 236), (34, 120, 74)),
+    "wrong": ((253, 235, 235), (178, 45, 45)),
+}
+MATRIX_TEXT = "#111827"
+MATRIX_FAILED_TEXT = "rgb(178, 45, 45)"
+FAILED_COLUMN = "[FEHLER]"
+
+
+def matrix_color(kind, share):
+    """CSS fuer eine Zelle, Staerke nach Anteil zwischen 0 und 1.
+
+    Der Startwert 0.15 sorgt dafuer, dass auch ein einzelnes Ticket
+    sichtbar bleibt. Die Textfarbe wird mitgesetzt, damit die Zahl in
+    hellem wie dunklem Streamlit-Design lesbar bleibt.
+    """
+    light, strong = MATRIX_RAMPS[kind]
+    weight = 0.15 + 0.85 * min(max(share, 0.0), 1.0)
+    red, green, blue = (
+        round(start + (end - start) * weight)
+        for start, end in zip(light, strong)
+    )
+    return (f"background-color: rgb({red}, {green}, {blue}); "
+            f"color: {MATRIX_TEXT};")
+
+
+def matrix_styles(frame):
+    """Hintergrundfarben fuer die Confusion-Matrix.
+
+    Gruen auf der Diagonale (richtig), rot daneben (verwechselt),
+    roter Text ohne Hintergrund in der Spalte [FEHLER] - eine
+    gescheiterte Anfrage ist keine Fehlklassifikation. Nullen bleiben
+    ohne Farbe. Die Staerke ist der
+    Anteil an der Zeilensumme, damit die Matrix in allen drei Modi
+    gleich aussieht. Zahlen und Aufbau der Tabelle bleiben unberuehrt.
+    """
+    styles = pd.DataFrame("", index=frame.index, columns=frame.columns)
+    for label in frame.index:
+        total = frame.loc[label].sum()
+        if not total:
+            continue
+        for column in frame.columns:
+            count = frame.loc[label, column]
+            if not count:
+                continue
+            if column == FAILED_COLUMN:
+                styles.loc[label, column] = (
+                    f"color: {MATRIX_FAILED_TEXT}; font-weight: 600;"
+                )
+                continue
+            kind = "correct" if column == label else "wrong"
+            styles.loc[label, column] = matrix_color(
+                kind, count / total,
+            )
+    return styles
+
+
 def confusion_matrix(results):
     """Count the tickets for every pair of true label and predicted label.
 
@@ -526,7 +585,7 @@ def model_label(provider, results=None):
         models = sorted({display_model(row.get("model_version")) for row in results})
         name = ", ".join(models)
     else:
-        from evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
+        from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         engine = method["provider"]
         name = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
 
@@ -739,35 +798,253 @@ def version_chart(measured):
     return alt.layer(*layers).properties(height=320)
 
 
-def render_prompts(measured):
-    """Je Version eine Karte mit dem verwendeten Prompt.
+PROMPT_BOX = (
+    'white-space:pre-wrap;word-break:break-word;background:#ffffff;'
+    'color:#111827;border:1px solid #e5e7eb;border-radius:6px;'
+    'padding:0.75rem;margin:0;font-size:0.82rem;line-height:1.6;'
+    'font-family:ui-monospace,SFMono-Regular,Menlo,monospace'
+)
+PROMPT_REMOVED = (
+    'background:#fdebeb;color:#b22d2d;text-decoration:line-through;'
+    'border-radius:3px;padding:0 2px'
+)
+PROMPT_ADDED = (
+    'background:#e8f5ec;color:#22784a;font-weight:600;'
+    'border-radius:3px;padding:0 2px'
+)
+PROMPT_VERSIONS = ("V1", "V2", "V3")
 
-    Bewusst ohne Aufklappen: beim Vergleich von Prompt-Varianten will
-    man die Unterschiede direkt nebeneinander sehen.
+
+def prompt_texts(version):
+    """Die unterschiedlichen Texte einer Version, je Text die Anbieter.
+
+    Die Versionen sind anbieterunabhaengig gedacht. Steht fuer Gemini
+    und OpenAI derselbe Text, erscheint er nur einmal. Leere Eintraege
+    gelten als noch nicht definiert.
+    """
+    from backend.llms.prompts import PROMPTS
+
+    found = {}
+    for provider, text in PROMPTS.get(version, {}).items():
+        if text.strip():
+            found.setdefault(text, []).append(provider)
+    return found
+
+
+def prompt_baseline(version):
+    """Die zuletzt davor definierte Version als Vergleichsgrundlage.
+
+    V2 wird gegen V1 verglichen, V3 gegen V2. Ist die direkte
+    Vorgaengerin noch leer, wird die naechste davor genommen. Gibt es
+    keine, entfaellt der Vergleich.
+    """
+    index = PROMPT_VERSIONS.index(version)
+    for earlier in reversed(PROMPT_VERSIONS[:index]):
+        texts = list(prompt_texts(earlier))
+        if texts:
+            return earlier, texts[0]
+    return None, ""
+
+
+def prompt_words(text):
+    """Woerter samt folgendem Leerraum, damit der Umbruch erhalten bleibt."""
+    return re.findall(r"\S+\s*", text)
+
+
+def prompt_diff_html(old, new):
+    """Wortweiser Vergleich: rot durchgestrichen raus, gruen rein."""
+    before, after = prompt_words(old), prompt_words(new)
+    matcher = difflib.SequenceMatcher(None, before, after)
+    parts = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            parts.append(escape("".join(before[i1:i2])))
+            continue
+        if tag in ("replace", "delete"):
+            gone = escape("".join(before[i1:i2]))
+            parts.append(f'<span style="{PROMPT_REMOVED}">{gone}</span>')
+        if tag in ("replace", "insert"):
+            fresh = escape("".join(after[j1:j2]))
+            parts.append(f'<span style="{PROMPT_ADDED}">{fresh}</span>')
+    return f'<pre style="{PROMPT_BOX}">{"".join(parts)}</pre>'
+
+
+def render_prompts():
+    """Je Prompt-Version eine aufklappbare Karte mit dem echten Text.
+
+    Der Text wird bei jedem Durchlauf frisch aus backend/llms/prompts.py
+    gelesen und nicht zwischengespeichert. Nach einem Neuladen des
+    Dashboards steht hier also immer der aktuelle Stand. Ab der
+    zweiten Version kommt ein Vergleich zur Vorgaengerin dazu.
     """
     st.caption(
         "Verwendete Prompts – ohne diese Angabe ist ein Ergebnis "
         "nicht nachvollziehbar."
     )
+    for version in PROMPT_VERSIONS:
+        found = prompt_texts(version)
+        with st.expander(f"Prompt {version}", expanded=False):
+            if not found:
+                st.markdown("_Noch nicht definiert_")
+                continue
+            st.caption("Vollständiger Text")
+            for current, providers in found.items():
+                if len(found) > 1:
+                    st.caption(" / ".join(sorted(providers)))
+                st.html(
+                    f'<pre style="{PROMPT_BOX}">'
+                    f'{escape(current)}</pre>'
+                )
+            earlier, baseline = prompt_baseline(version)
+            if earlier is None:
+                st.caption("Ausgangsversion – kein Vergleich möglich.")
+                continue
+            st.caption(f"Änderungen gegenüber {earlier}")
+            st.html(prompt_diff_html(baseline, list(found)[0]))
 
-    columns = st.columns(len(VERSIONS), gap="small")
-    for column, version in zip(columns, VERSIONS):
-        done = version["key"] in measured
-        with column, st.container(border=True, height=170):
-            st.html(
-                f'<div style="background:{version["tint"]};'
-                f'color:{version["ink"]};padding:0.35rem 0.6rem;'
-                f'border-radius:6px;font-weight:600;font-size:0.9rem">'
-                f'{escape(comparison_label(version, measured))}</div>'
+
+def available_matrix_versions(mode):
+    """Verfahren, zu denen es fuer diesen Modus eine Ergebnisdatei gibt.
+
+    Nur gemessene Laeufe stehen zur Auswahl. Durch den gemeinsamen
+    Modus und dieselbe Batch-Einstellung liegt beiden Matrizen
+    zwangslaeufig dieselbe Ticket-Stichprobe zugrunde.
+    """
+    batch = st.session_state.get("batch_evaluation", True)
+    return [
+        key for key in PROVIDERS
+        if results_path(key, mode, batch=batch).is_file()
+    ]
+
+
+def default_matrix_pair(options):
+    """Zwei aufeinanderfolgende Prompt-Versionen desselben Anbieters.
+
+    Gibt es kein solches Paar, werden die beiden zuletzt gemessenen
+    Verfahren genommen.
+    """
+    for later in reversed(options):
+        method = PROVIDERS[later]
+        version = method.get("prompt_version")
+        name = method.get("provider")
+        if not version or version not in PROMPT_VERSIONS:
+            continue
+        index = PROMPT_VERSIONS.index(version)
+        if index == 0:
+            continue
+        earlier = f"{name}-{PROMPT_VERSIONS[index - 1].lower()}"
+        if earlier in options:
+            return earlier, later
+    if len(options) >= 2:
+        return options[-2], options[-1]
+    return options[0], options[0]
+
+
+def align_matrices(first, second):
+    """Beide Matrizen auf dieselbe Reihenfolge der Kategorien bringen.
+
+    Zeilen und Spalten sind danach identisch, damit die Zellen
+    nebeneinander wirklich dasselbe Feld meinen. Spalten wie [FEHLER]
+    stehen hinten.
+    """
+    names = list(first.columns) + list(second.columns)
+    labels = sorted({n for n in names if not n.startswith("[")})
+    extra = sorted({n for n in names if n.startswith("[")})
+    rows = sorted(set(first.index) | set(second.index))
+    order = labels + extra
+    return tuple(
+        frame.reindex(index=rows, columns=order, fill_value=0)
+        .fillna(0).astype(int)
+        for frame in (first, second)
+    )
+
+
+def render_matrix_comparison(mode):
+    """Zwei Confusion-Matrizen desselben Datensatzes untereinander.
+
+    Zur Auswahl stehen alle Verfahren, auch die noch nicht gemessenen -
+    so ist sichtbar, was spaeter dazukommt. Streamlit kann einzelne
+    Eintraege nicht sperren, deshalb sind sie beschriftet. Eine noch
+    nicht gemessene Version zeigt dieselbe Tabelle mit lauter Nullen,
+    damit das Vergleichsbild von Anfang an steht.
+    """
+    st.subheader("Confusion-Matrix")
+    st.caption(
+        "Zeilen: richtige Kategorie, Spalten: Antwort des Modells. "
+        "Die Diagonale zeigt die richtigen Antworten. "
+        "[FEHLER] bedeutet: Die Anfrage an das Modell ist "
+        "fehlgeschlagen."
+    )
+    measured = available_matrix_versions(mode)
+    if not measured:
+        st.info("Für diesen Datensatz liegt noch kein Ergebnis vor.")
+        return
+
+    options = list(PROVIDERS)
+    done = set(measured)
+
+    def label_of(key):
+        path = results_path(key, mode, batch=st.session_state.get("batch_evaluation", True))
+        label = model_label(key, load_results(path) if path.is_file() else None)
+        return label if key in done else f"{label} · noch nicht gemessen"
+
+    def matrix_of(key):
+        rows = load_results(results_path(key, mode, batch=batch))
+        return confusion_matrix(rows) if rows else None
+
+    batch = st.session_state.get("batch_evaluation", True)
+    left_default, right_default = default_matrix_pair(measured)
+
+    # Auswahl und zugehoerige Tabelle stehen direkt untereinander.
+    # Die Behaelter werden hier belegt, gefuellt wird nach dem Laden.
+    left = st.selectbox(
+        "Vorherige Version", options=options,
+        index=options.index(left_default),
+        format_func=label_of, key=f"matrix_left_{mode}",
+    )
+    left_slot = st.container()
+    right = st.selectbox(
+        "Neue Version", options=options,
+        index=options.index(right_default),
+        format_func=label_of, key=f"matrix_right_{mode}",
+    )
+    right_slot = st.container()
+
+    frames = {}
+    for key in dict.fromkeys((left, right)):
+        if key in done:
+            frame = matrix_of(key)
+            if frame is not None:
+                frames[key] = frame
+
+    # Vorlage fuer die Nullen-Tabelle: irgendeine gemessene Matrix
+    # liefert die Kategorien, damit beide Tabellen gleich aussehen.
+    template = next(iter(frames.values()), None)
+    if template is None:
+        template = matrix_of(measured[0])
+    if template is None:
+        st.info("Für diesen Datensatz liegt noch kein Ergebnis vor.")
+        return
+
+    shown = {
+        key: frames.get(key, template * 0)
+        for key in dict.fromkeys((left, right))
+    }
+    if left != right:
+        first, second = align_matrices(shown[left], shown[right])
+        shown[left], shown[right] = first, second
+
+    for slot, key in ((left_slot, left), (right_slot, right)):
+        with slot:
+            if key not in frames:
+                st.caption(
+                    "Noch nicht gemessen – alle Werte 0. Sobald ein "
+                    "Lauf vorliegt, stehen hier die echten Zahlen."
+                )
+            st.dataframe(
+                shown[key].style.apply(matrix_styles, axis=None),
+                width="stretch",
             )
-            st.caption(
-                f"{version['approach']} · "
-                + ("gemessen" if done else "noch offen")
-            )
-            if version["prompt"]:
-                st.markdown(version["prompt"])
-            else:
-                st.markdown("_Prompt noch nicht festgelegt._")
 
 
 def render_version_comparison(mode=None):
@@ -795,14 +1072,20 @@ def render_version_comparison(mode=None):
 
     st.divider()
 
+    render_prompts()
+
+    st.divider()
+
+    render_matrix_comparison(mode)
+
+    st.divider()
+
     st.subheader("Entwicklung im Vergleich")
     st.caption(
         "Accuracy = Trefferquote. "
         "Macro-F1 = durchschnittliches F1 über alle Kategorien."
     )
     st.altair_chart(version_chart(measured), width="stretch")
-
-    render_prompts(measured)
 
 
 def main():
@@ -861,14 +1144,6 @@ def main():
         st.dataframe(for_display(errors), width="stretch")
     else:
         st.info("Keine Fehlklassifikationen.")
-
-    st.subheader("Confusion-Matrix")
-    st.caption(
-        "Zeilen: richtige Kategorie, Spalten: Antwort des Modells. "
-        "Die Diagonale zeigt die richtigen Antworten. "
-        "[FEHLER] bedeutet: Die Anfrage an das Modell ist fehlgeschlagen."
-    )
-    st.dataframe(confusion_matrix(results), width="stretch")
 
     render_backlog()
 

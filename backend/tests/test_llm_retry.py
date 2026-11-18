@@ -7,9 +7,9 @@ import unittest
 from unittest.mock import Mock, call, patch
 from urllib.error import HTTPError
 
-from backend.llm_classifier import DEFAULT_CATEGORIES, LLMError, classify_with_gemini
-from backend.openai_classifier import classify_with_openai
-from evaluation.evaluate import run_evaluation
+from backend.llms.gemini import DEFAULT_CATEGORIES, LLMError, classify_with_gemini
+from backend.llms.openai import classify_with_openai
+from backend.evaluation.evaluate import run_evaluation
 
 
 def provider_error(status, payload=None, **header_values):
@@ -31,13 +31,13 @@ def success_response(provider):
 
 class ProviderRetryTests(unittest.TestCase):
     def setUp(self):
-        pacing = patch("evaluation.evaluate.sleep")
+        pacing = patch("backend.evaluation.evaluate.sleep")
         self.addCleanup(pacing.stop)
         self.pacing = pacing.start()
         self.now = 0
-        clock = patch("backend.llm_retry.monotonic", side_effect=lambda: self.now)
-        waits = patch("backend.llm_retry.sleep", side_effect=self.advance)
-        jitter = patch("backend.llm_retry.uniform", return_value=0)
+        clock = patch("backend.llms.retry.monotonic", side_effect=lambda: self.now)
+        waits = patch("backend.llms.retry.sleep", side_effect=self.advance)
+        jitter = patch("backend.llms.retry.uniform", return_value=0)
         for mocked in (clock, waits, jitter):
             self.addCleanup(mocked.stop)
         clock.start()
@@ -92,9 +92,9 @@ class ProviderRetryTests(unittest.TestCase):
             {"ticket_id": "first", "text": "My account is locked", "expected": "ACCOUNT"},
             {"ticket_id": "second", "text": "I cannot sign in", "expected": "ACCOUNT"},
         ]
-        with patch("backend.openai_classifier.urlopen", side_effect=[
+        with patch("backend.llms.openai.urlopen", side_effect=[
             provider_error(429), provider_error(429), provider_error(429), success_response("OpenAI"),
-        ]) as opener, patch("evaluation.evaluate.load_env", return_value={"OPENAI_API_KEY": "test"}):
+        ]) as opener, patch("backend.evaluation.evaluate.load_env", return_value={"OPENAI_API_KEY": "test"}):
             first, second = run_evaluation(tickets, provider="openai-v1")
         self.assertEqual(opener.call_count, 4)
         self.assertEqual(self.waits.call_args_list, [call(0.5), call(1)])
@@ -114,7 +114,7 @@ class ProviderRetryTests(unittest.TestCase):
 
     def test_evaluation_paces_cloud_but_not_rules(self):
         tickets = [{'text':'account', 'expected':'ACCOUNT'}] * 3
-        with patch('evaluation.evaluate.classify_ticket', return_value=('ACCOUNT', .9, 'test', '')), patch('evaluation.evaluate.load_env', return_value={}):
+        with patch('backend.evaluation.evaluate.classify_ticket', return_value=('ACCOUNT', .9, 'test', '')), patch('backend.evaluation.evaluate.load_env', return_value={}):
             run_evaluation(tickets, provider='openai-v1')
             self.assertEqual(self.pacing.call_args_list, [call(6), call(6)])
             self.pacing.reset_mock()
@@ -122,11 +122,11 @@ class ProviderRetryTests(unittest.TestCase):
             self.pacing.assert_not_called()
 
     def test_evaluation_default_waits_three_minutes_but_remains_bounded(self):
-        from evaluation.config import RETRY_BUDGET_SECONDS
+        from backend.evaluation.config import RETRY_BUDGET_SECONDS
         self.assertEqual(RETRY_BUDGET_SECONDS, 300)
         tickets = [{"text": "My account is locked", "expected": "ACCOUNT"}]
-        with patch("evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
-            "backend.llm_classifier.urlopen", side_effect=[
+        with patch("backend.evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
+            "backend.llms.gemini.urlopen", side_effect=[
                 provider_error(429, {"error": {"details": [{
                     "@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": "180s"
                 }]}}), success_response("Gemini")
@@ -136,8 +136,8 @@ class ProviderRetryTests(unittest.TestCase):
         self.assertEqual(opener.call_count, 2)
         self.waits.assert_called_once_with(180)
         self.waits.reset_mock()
-        with patch("evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
-            "backend.llm_classifier.urlopen", side_effect=provider_error(429, Retry_After="400")
+        with patch("backend.evaluation.evaluate.load_env", return_value={"GEMINI_API_KEY": "test"}), patch(
+            "backend.llms.gemini.urlopen", side_effect=provider_error(429, Retry_After="400")
         ) as opener:
             rows = run_evaluation(tickets, provider="gemini-v1")
         self.assertIn("requested 400.0s", rows[0]["error"])

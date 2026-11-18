@@ -1,6 +1,6 @@
 # Dataset: Bitext Customer Support
 
-All numbers come from real runs of our scripts (`backend/preprocessing.py`, last run on 13.11.2026). Nothing is estimated. Sections 1 and 2 describe the raw file (11 labels); sections 3 and 4 describe the cleaned data (9 labels, see section 3).
+All numbers come from real runs of our scripts (`backend/data/preprocessing.py`, last run on 13.11.2026). Nothing is estimated. Sections 1 and 2 describe the raw file (11 labels); sections 3 and 4 describe the cleaned data (9 labels, see section 3).
 
 ## 1. Source and version
 
@@ -10,7 +10,7 @@ All numbers come from real runs of our scripts (`backend/preprocessing.py`, last
 - Version (Hugging Face commit): `430d1a89bd93bd1fa23c16f29dd53e73f0087443`, last modified 18.07.2024
 - SHA-256: `6f81102b0100b97b8468eb04368033a23206bf1fde9d53500d5806ec1001a434` (matches Hugging Face, checked 10.11.2026)
 - Licence: CDLA-Sharing-1.0 (https://cdla.dev/sharing-1-0/)
-- Stored unchanged in `data/raw/`, not in Git. The licence allows redistribution only under conditions (same licence, credit to Bitext, mark changed files). To avoid these obligations, nobody commits the CSV files; everyone downloads the raw file with `python backend/download_data.py`.
+- Stored unchanged in `data/raw/`, not in Git. The licence allows redistribution only under conditions (same licence, credit to Bitext, mark changed files). To avoid these obligations, nobody commits the CSV files; everyone downloads the raw file with `python backend/data/download_data.py`.
 
 ## 2. Data checks
 
@@ -49,7 +49,7 @@ Observations:
 
 ## 3. Cleaning and split
 
-Cleaning runs in this order (all steps are functions in `backend/preprocessing.py`):
+Cleaning runs in this order (all steps are functions in `backend/data/preprocessing.py`):
 
 | Step | Function | Tickets after the step |
 |---|---|---|
@@ -114,11 +114,11 @@ SHA-256 of the files (seed 42, 200 per label):
 - `validation.csv`: `c584d55070cc8ae42ccec4ad17450035cc2e9b3d2c3e99aee12bbcd51a839a0d`
 - `test.csv`: `c1222c8704f11004d8bea3c012a18910743f3767e71bb548deee4094c62ebd23`
 
-The checksums were produced with the library versions in `requirements.txt` (pandas 3.1.1). With other versions, the random shuffle may differ.
+The checksums were produced with the library versions in `backend/requirements.txt` (pandas 3.1.1). With other versions, the random shuffle may differ.
 
 How to reproduce:
 
 ```sh
-python backend/download_data.py
-python backend/preprocessing.py
+python backend/data/download_data.py
+python backend/data/preprocessing.py
 ```
