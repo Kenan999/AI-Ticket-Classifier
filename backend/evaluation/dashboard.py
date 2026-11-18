@@ -94,8 +94,31 @@ VERSIONS = [
     ),
 ]
 
+def configured_versions():
+    from backend.llms.config import model_configuration
+    from backend.evaluation.evaluate import load_env
+    versions = [VERSIONS[0]]
+    for item in model_configuration(load_env())["llms"]:
+        for prompt in ("V1", "V2", "V3"):
+            key = item["id"] + "-" + prompt.lower()
+            versions.append({"key": key, "provider": key,
+                "model": item["model"], "short": item["model"] + " · " + prompt,
+                "tint": "#fdf0ea" if item["id"] == "gemini" else "#f0eefc",
+                "ink": "#a8451c" if item["id"] == "gemini" else "#5541a6",
+                "approach": "Versionierter System-Prompt", "prompt": ""})
+    return versions
+
+
 TABLE_STYLE = """
 <style>
+.ev-table-scroll { width: 100%; overflow-x: auto; padding-bottom: 0.7rem; }
+.ev-table th.ev-group { border-left: 8px solid var(--background-color, Canvas); padding: 0.8rem; overflow-wrap: anywhere; }
+.ev-table thead tr:nth-child(2) th:nth-child(3n+2),
+.ev-table tbody tr:not(.ev-summary) td:nth-child(3n+2),
+.ev-table .ev-summary td:not(:first-child) { border-left: 8px solid var(--background-color, Canvas); }
+.ev-table tbody tr:nth-child(even):not(.ev-summary) { background: rgba(128,128,128,0.06); }
+.ev-table tbody tr:hover { background: rgba(128,128,128,0.12); }
+.ev-table .ev-name, .ev-table .ev-corner { position: sticky; left: 0; z-index: 1; background: var(--background-color, Canvas); }
 .ev-table {
     width: 100%;
     table-layout: fixed;
@@ -114,13 +137,13 @@ TABLE_STYLE = """
     border-radius: 6px 6px 0 0;
     letter-spacing: 0.01em;
 }
-.ev-sub { font-weight: 500; opacity: 0.75; font-size: 0.78rem; }
+.ev-table .ev-sub { font-weight: 600; opacity: 1; color: #293548; font-size: 0.78rem; }
 .ev-corner { background: transparent; }
 .ev-name { text-align: left; font-weight: 500; white-space: nowrap; }
 .ev-value { opacity: 0.85; }
 .ev-strong { font-weight: 700; opacity: 1; }
 .ev-empty { opacity: 0.35; }
-.ev-total { font-weight: 700; }
+.ev-table .ev-total { font-weight: 700; color: #293548; opacity: 1; }
 .ev-summary td { border-top: 2px solid rgba(128, 128, 128, 0.35); }
 </style>
 """
@@ -267,12 +290,11 @@ def render_sidebar():
         prompt_controls = st.container()
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         model_env = load_env()
-        active_models = {
-            "gemini": model_env.get("GEMINI_MODEL", DEFAULT_MODEL),
-            "openai": model_env.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
-        }
+        from backend.llms.config import model_configuration
+        active_models = {item["id"]: item["model"]
+                         for item in model_configuration(model_env)["llms"]}
         engine = st.selectbox(
-            "3. Modell / Verfahren", options=[BASELINE, "gemini", "openai"],
+            "3. Modell / Verfahren", options=[BASELINE, *active_models],
             format_func=lambda key: "Lokale Regeln (kein LLM)" if key == BASELINE else active_models[key],
             help="Lokale Regeln brauchen keinen Prompt. Gemini und OpenAI benötigen einen API-Key.",
         )
@@ -291,7 +313,9 @@ def render_sidebar():
                     key="batch_evaluation", disabled=engine == BASELINE)
         if engine != BASELINE and st.session_state.get("batch_evaluation", True):
             st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
-        prompt_missing = missing_prompt_message(provider)
+        supported = provider in PROVIDERS
+        prompt_missing = (missing_prompt_message(provider) if supported else
+                          "Dieses Modell ist konfiguriert, hat aber noch keinen Evaluation-Adapter. Keine Ergebnisse verfügbar.")
         if prompt_missing:
             st.info(prompt_missing)
 
@@ -328,7 +352,8 @@ def render_sidebar():
             st.caption(f"{last_run['requests']} HTTP-Anfragen, davon {last_run['retries']} Wiederholungen. {last_run['errors']} fehlgeschlagene Tickets. Fortschritt ist nicht Accuracy.")
         st.divider()
         st.caption("Ergebnisdatei")
-        st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)).name, language=None)
+        if supported:
+            st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)).name, language=None)
         return provider, mode, prompt_missing
 
 
@@ -552,7 +577,7 @@ def version_metrics(version, mode=None):
     niemals Platzhalterzahlen erfunden.
     """
     provider = version["provider"]
-    if provider is None or missing_prompt_message(provider):
+    if provider not in PROVIDERS or missing_prompt_message(provider):
         return None
     path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
     if not path.is_file():
@@ -580,6 +605,9 @@ def display_model(value):
 def model_label(provider, results=None):
     if provider == BASELINE:
         return "Lokale Regeln (kein LLM)"
+    if provider not in PROVIDERS:
+        entry = next(v for v in configured_versions() if v["provider"] == provider)
+        return entry["short"] + " · nicht unterstützt"
     method = PROVIDERS[provider]
     if results:
         models = sorted({display_model(row.get("model_version")) for row in results})
@@ -597,22 +625,26 @@ def comparison_label(version, measured):
     return model_label(version["provider"], data["results"] if data else None)
 
 
-def version_table_html(measured):
+def version_table_html(measured, versions=None):
     """Baut die Vergleichstabelle als HTML.
 
     Zeilen sind Kategorien, je Version eine Spaltengruppe mit
     Precision, Recall und F1. Unten Macro-F1 und Accuracy.
     """
+    versions = VERSIONS if versions is None else versions
     categories = []
     for data in measured.values():
         for category in data["scores"]:
             if category not in categories:
                 categories.append(category)
+    if not categories:
+        from backend.classifier import DATASET_CATEGORIES
+        categories = list(DATASET_CATEGORIES)
     categories.sort()
 
     head_top = ['<th class="ev-corner">Kategorie</th>']
     head_sub = []
-    for version in VERSIONS:
+    for version in versions:
         key = version["key"]
         head_top.append(
             f'<th colspan="3" class="ev-group" '
@@ -628,7 +660,7 @@ def version_table_html(measured):
     body = []
     for category in categories:
         cells = [f'<td class="ev-name">{escape(category)}</td>']
-        for version in VERSIONS:
+        for version in versions:
             data = measured.get(version["key"])
             score = data["scores"].get(category) if data else None
             for key in ("precision", "recall", "f1"):
@@ -647,7 +679,7 @@ def version_table_html(measured):
         ("Accuracy", "accuracy", "{:.0%}"),
     ):
         cells = [f'<td class="ev-name ev-strong">{label}</td>']
-        for version in VERSIONS:
+        for version in versions:
             data = measured.get(version["key"])
             if data is None:
                 cells.append('<td colspan="3" class="ev-empty">–</td>')
@@ -661,16 +693,17 @@ def version_table_html(measured):
 
     # Feste Spaltenbreiten, damit jede Version gleich breit ist -
     # unabhaengig davon, ob sie Zahlen oder nur Striche enthaelt.
-    value_columns = len(VERSIONS) * 3
+    value_columns = len(versions) * 3
     colgroup = (
-        '<colgroup><col style="width:16%">'
-        + f'<col style="width:{84 / value_columns:.3f}%">' * value_columns
+        '<colgroup><col style="width:190px">'
+        + '<col style="width:82px">' * value_columns
         + "</colgroup>"
     )
 
     return (
         TABLE_STYLE
-        + '<table class="ev-table">'
+        + '<div class="ev-table-scroll" role="region" aria-label="Modellvergleich" tabindex="0">'
+        + f'<table class="ev-table" style="min-width:{190 + 246 * len(versions)}px">'
         + colgroup
         + "<thead><tr>"
         + "".join(head_top)
@@ -678,7 +711,7 @@ def version_table_html(measured):
         + "".join(head_sub)
         + "</tr></thead><tbody>"
         + "".join(body)
-        + "</tbody></table>"
+        + "</tbody></table></div>"
     )
 
 
@@ -913,7 +946,7 @@ def available_matrix_versions(mode):
     batch = st.session_state.get("batch_evaluation", True)
     return [
         key for key in PROVIDERS
-        if results_path(key, mode, batch=batch).is_file()
+        if key in {v["provider"] for v in VERSIONS} and results_path(key, mode, batch=batch).is_file()
     ]
 
 
@@ -975,76 +1008,32 @@ def render_matrix_comparison(mode):
         "[FEHLER] bedeutet: Die Anfrage an das Modell ist "
         "fehlgeschlagen."
     )
+    options = [v["provider"] for v in VERSIONS]
     measured = available_matrix_versions(mode)
-    if not measured:
-        st.info("Für diesen Datensatz liegt noch kein Ergebnis vor.")
-        return
+    batch = st.session_state.get("batch_evaluation", True)
 
-    options = list(PROVIDERS)
-    done = set(measured)
+    def rows_of(key):
+        if key not in PROVIDERS or missing_prompt_message(key):
+            return []
+        path = results_path(key, mode, batch=batch)
+        return load_results(path) if path.is_file() else []
 
     def label_of(key):
-        path = results_path(key, mode, batch=st.session_state.get("batch_evaluation", True))
-        label = model_label(key, load_results(path) if path.is_file() else None)
-        return label if key in done else f"{label} · noch nicht gemessen"
+        rows = rows_of(key)
+        label = model_label(key, rows)
+        return label if rows else label + " · noch nicht gemessen"
 
-    def matrix_of(key):
-        rows = load_results(results_path(key, mode, batch=batch))
-        return confusion_matrix(rows) if rows else None
-
-    batch = st.session_state.get("batch_evaluation", True)
-    left_default, right_default = default_matrix_pair(measured)
-
-    # Auswahl und zugehoerige Tabelle stehen direkt untereinander.
-    # Die Behaelter werden hier belegt, gefuellt wird nach dem Laden.
-    left = st.selectbox(
-        "Vorherige Version", options=options,
-        index=options.index(left_default),
-        format_func=label_of, key=f"matrix_left_{mode}",
-    )
-    left_slot = st.container()
-    right = st.selectbox(
-        "Neue Version", options=options,
-        index=options.index(right_default),
-        format_func=label_of, key=f"matrix_right_{mode}",
-    )
-    right_slot = st.container()
-
-    frames = {}
-    for key in dict.fromkeys((left, right)):
-        if key in done:
-            frame = matrix_of(key)
-            if frame is not None:
-                frames[key] = frame
-
-    # Vorlage fuer die Nullen-Tabelle: irgendeine gemessene Matrix
-    # liefert die Kategorien, damit beide Tabellen gleich aussehen.
-    template = next(iter(frames.values()), None)
-    if template is None:
-        template = matrix_of(measured[0])
-    if template is None:
-        st.info("Für diesen Datensatz liegt noch kein Ergebnis vor.")
-        return
-
-    shown = {
-        key: frames.get(key, template * 0)
-        for key in dict.fromkeys((left, right))
-    }
-    if left != right:
-        first, second = align_matrices(shown[left], shown[right])
-        shown[left], shown[right] = first, second
-
-    for slot, key in ((left_slot, left), (right_slot, right)):
-        with slot:
-            if key not in frames:
-                st.caption(
-                    "Noch nicht gemessen – alle Werte 0. Sobald ein "
-                    "Lauf vorliegt, stehen hier die echten Zahlen."
-                )
-            st.dataframe(
-                shown[key].style.apply(matrix_styles, axis=None),
-                width="stretch",
-            )
+    defaults = default_matrix_pair(measured) if measured else (options[0], options[-1])
+    for title, default, side in (("Vorherige Version", defaults[0], "left"),
+                                 ("Neue Version", defaults[1], "right")):
+        key = st.selectbox(title, options=options, index=options.index(default),
+                           format_func=label_of, key=f"matrix_{side}_{mode}")
+        rows = rows_of(key)
+        if not rows:
+            st.info("Nicht unterstützt – kein Evaluation-Adapter." if key not in PROVIDERS
+                    else "Noch nicht gemessen – keine Confusion-Matrix verfügbar.")
+            continue
+        st.dataframe(confusion_matrix(rows).style.apply(matrix_styles, axis=None), width="stretch")
 
 
 def render_version_comparison(mode=None):
@@ -1062,7 +1051,11 @@ def render_version_comparison(mode=None):
         "P = Precision, R = Recall. Werte zwischen 0 und 1, "
         "Bestwert 1.00."
     )
-    st.html(version_table_html(measured))
+    for prompt in ("V1", "V2", "V3"):
+        group = [VERSIONS[0]] + [v for v in VERSIONS[1:]
+                                 if v["key"].endswith("-" + prompt.lower())]
+        st.markdown(f"### {prompt}")
+        st.html(version_table_html(measured, group))
     if missing:
         st.caption(
             "Ohne Messung (angezeigtes Modell ist konfiguriert): " + ", ".join(missing)
@@ -1089,6 +1082,8 @@ def render_version_comparison(mode=None):
 
 
 def main():
+    global VERSIONS
+    VERSIONS = configured_versions()
     st.set_page_config(
         page_title="Evaluation – Ticket-Klassifikator",
         page_icon="📊",
@@ -1096,13 +1091,13 @@ def main():
     )
 
     provider, mode, prompt_missing = render_sidebar()
-    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
-
     if prompt_missing:
         st.title("Ticket-Klassifikator – Evaluation")
         st.info(prompt_missing)
+        render_version_comparison(mode)
         return
 
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
@@ -1110,6 +1105,7 @@ def main():
             f"\"{MODES[mode]['label']}\" gibt es noch keine Ergebnisse. "
             "Bitte links auf \"Evaluation neu ausführen\" klicken."
         )
+        render_version_comparison(mode)
         return
 
     results = load_results(path)

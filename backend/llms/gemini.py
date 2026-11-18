@@ -15,7 +15,9 @@ from .retry import LLMError, read_provider_response
 from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
-DEFAULT_MODEL = "gemini-3.5-flash-lite"
+from .config import default_model
+
+DEFAULT_MODEL = default_model("gemini")
 MAX_RESPONSE_BYTES = 32 * 1024
 
 

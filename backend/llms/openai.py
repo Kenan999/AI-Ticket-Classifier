@@ -9,7 +9,9 @@ from .gemini import configured_categories
 from .retry import LLMError, read_provider_response
 from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
-DEFAULT_OPENAI_MODEL = "gpt-4.1-mini"
+from .config import default_model
+
+DEFAULT_OPENAI_MODEL = default_model("openai")
 MAX_RESPONSE_BYTES = 32 * 1024
 
 

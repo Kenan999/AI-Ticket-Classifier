@@ -9,8 +9,22 @@ import streamlit as st
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def database_path():
+def observation_config(models=None):
+    """Receive model metadata as an object; keep local observation settings separate."""
     config = json.loads(Path(__file__).with_name("config.json").read_text())
+    if models is None:
+        # Composition boundary: the backend supplies the project's registry.
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from backend.llms.config import model_configuration
+        models = model_configuration(test_environment())
+    config["llms"] = [dict(item) for item in models["llms"]]
+    return config
+
+
+def database_path():
+    config = observation_config()
     path = Path(config["database"]["path"]).expanduser()
     return path if path.is_absolute() else ROOT / path
 
@@ -231,7 +245,8 @@ def test_environment():
 
 
 def selected_model(provider, model):
-    return test_environment().get("OPENAI_MODEL", model) if provider == "openai" else model
+    return next((item["model"] for item in observation_config()["llms"]
+                 if item["id"] == provider), model)
 
 
 def request_budget(config, model, text):
@@ -251,7 +266,7 @@ def send_test(provider, model, text, run_id=None, run_kind="single"):
     """Send one explicit user-triggered request and record it via the local service."""
     import os
     from urllib.request import Request, urlopen
-    config = json.loads(Path(__file__).with_name("config.json").read_text())
+    config = observation_config()
     env = test_environment()
     key = env.get(provider.upper() + "_API_KEY", "").strip()
     if not key:
@@ -319,7 +334,7 @@ def send_test(provider, model, text, run_id=None, run_kind="single"):
 
 @st.dialog("LLM testen", width="small", dismissible=False)
 def test_dialog():
-    config = json.loads(Path(__file__).with_name("config.json").read_text())
+    config = observation_config()
     models = config.get("llms", [])
     if not models:
         st.info("Keine LLMs konfiguriert.")
@@ -385,7 +400,7 @@ def test_dialog():
 
 
 def model_overview():
-    config = json.loads(Path(__file__).with_name("config.json").read_text())
+    config = observation_config()
     st.subheader("Modelle & Anfragegrenzen")
     st.caption("Im Observation-Test konfigurierte Modelle. Modellgrenzen aus der Dokumentation; keine Live-Kontingente und keine Verfügbarkeitsgarantie für deinen Schlüssel.")
     rows = []
