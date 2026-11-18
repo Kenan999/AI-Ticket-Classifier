@@ -9,7 +9,7 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from backend.app import create_app
-from backend.classifier import MODEL_VERSION
+from backend.keyword_classifier import MODEL_VERSION
 from backend.llms.gemini import LLMError
 from backend.llms.openai import classify_with_openai, MAX_RESPONSE_BYTES
 

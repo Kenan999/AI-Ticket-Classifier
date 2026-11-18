@@ -30,8 +30,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend import classifier as backend_classifier
-from backend.classifier import dataset_label_for, predict_ticket
+from backend import keyword_classifier
+from backend.keyword_classifier import dataset_label_for, predict_ticket
 from backend.data.data_loader import load_dataset
 from backend.llms.gemini import (
     DEFAULT_MODEL,
@@ -284,7 +284,7 @@ def classify_ticket(text, provider=BASELINE, env=None):
         if name == GEMINI:
             prompt_options["instructions"] = render_prompt(
                 prompt_version, name, categories,
-                category_guidance=backend_classifier.CATEGORY_GUIDANCE,
+                category_guidance=keyword_classifier.CATEGORY_GUIDANCE,
             )
         prediction = adapter(
             text,

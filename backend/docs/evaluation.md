@@ -11,7 +11,7 @@ The evaluation lives in `backend/evaluation/` and only ever *reads* the backend:
 - `dashboard.py` — Streamlit view of the results
 
 It imports `predict_ticket` and `dataset_label_for` from
-`backend/classifier.py`, `load_dataset` from `backend/data/data_loader.py` and
+`backend/keyword_classifier.py`, `load_dataset` from `backend/data/data_loader.py` and
 `classify_with_gemini` from `backend/llms/gemini.py`. No backend file is
 modified, no Flask app is started and no SQLite database is touched. The
 dataset CSVs are read only — the sampling happens in memory, so no extra
@@ -27,7 +27,7 @@ reads them.
 ### Ground truth
 
 The dataset and classifier use the same nine labels. The evaluation reads
-them through `dataset_label_for` in `backend/classifier.py`. A historical or
+them through `dataset_label_for` in `backend/keyword_classifier.py`. A historical or
 invalid prediction without an exact dataset label counts as wrong. Macro-F1
 averages over the labels in the ground truth.
 
@@ -137,7 +137,7 @@ Two notes for whoever works on it next:
 `backend/llms/prompts.py` is the shared source for both adapters. V1 is the
 backend default. V2 and V3 initially use the same wording as V1, so they only
 become distinct experiments after you edit their templates. The configured
-nine-label list and shared category guidance from `backend/classifier.py`
+nine-label list and shared category guidance from `backend/keyword_classifier.py`
 are inserted when the prompt is rendered. The dashboard shows metrics after
 a run produces a result CSV.
 

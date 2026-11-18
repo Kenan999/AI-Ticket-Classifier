@@ -4,7 +4,7 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 
-from backend.classifier import DATASET_CATEGORIES
+from backend.keyword_classifier import DATASET_CATEGORIES
 
 
 class ReviewError(ValueError):

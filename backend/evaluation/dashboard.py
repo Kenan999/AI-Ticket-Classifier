@@ -76,7 +76,7 @@ VERSIONS = [
         "approach": "Regeln, kein LLM",
         "prompt": (
             "Kein Prompt. Gezählte Stichwörter mit festen Punktwerten "
-            "in backend/classifier.py."
+            "in backend/keyword_classifier.py."
         ),
     },
     *(
@@ -638,7 +638,7 @@ def version_table_html(measured, versions=None):
             if category not in categories:
                 categories.append(category)
     if not categories:
-        from backend.classifier import DATASET_CATEGORIES
+        from backend.keyword_classifier import DATASET_CATEGORIES
         categories = list(DATASET_CATEGORIES)
     categories.sort()
 

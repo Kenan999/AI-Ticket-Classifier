@@ -2,7 +2,7 @@
 
 import unittest
 
-from backend.classifier import (
+from backend.keyword_classifier import (
     DATASET_CATEGORIES, MODEL_VERSION, dataset_label_for, predict_ticket,
     suggest_customer_reply,
 )

@@ -321,7 +321,7 @@ not changed. Provider quotas still apply and cannot be increased by this code.
 
 `backend/llms/` contains `gemini.py`, `openai.py`, shared `prompts.py` and
 `retry.py`. Both the API and evaluation import these modules. The keyword
-baseline remains in `backend/classifier.py`.
+baseline remains in `backend/keyword_classifier.py`.
 
 ## Backend workspace
 
@@ -349,4 +349,4 @@ The loader reads raw or processed CSV files and returns `ticket_id`, `text`, and
 Ticket review and storage live in `backend/tickets/`. Manual checks live in
 `backend/scripts/`. The API-key environment reader lives in `backend/llms/config.py`;
 keys themselves are never stored in source. `backend/app.py` remains the API entry
-point, and `backend/classifier.py` contains the keyword baseline and category definitions.
+point, and `backend/keyword_classifier.py` contains the keyword baseline and category definitions.
