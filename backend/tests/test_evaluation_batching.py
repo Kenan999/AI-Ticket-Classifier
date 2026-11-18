@@ -62,7 +62,7 @@ class BatchTests(unittest.TestCase):
         with patch("backend.evaluation.batching.request_batch") as http:
             for invalid in [tickets+[{"text":"x"*20000}]]:
                 with self.assertRaises(ValueError): run(invalid,method,env,lambda _:None)
-            with self.assertRaises(ValueError): run(tickets,dict(method,prompt_version="V2"),env,lambda _:None)
+            with self.assertRaises(ValueError): run(tickets,dict(method,prompt_version="V3"),env,lambda _:None)
             with self.assertRaises(ValueError): run(tickets,method,dict(env,OPENAI_MODEL="unknown"),lambda _:None)
             http.assert_not_called()
     def test_separate_result_paths(self):
