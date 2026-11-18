@@ -520,15 +520,8 @@ def render():
     </style>""")
     with st.container(key="observation-toolbar"):
         title_column, source_group, provider_group, refresh_column, test_column, view_column = st.columns([1.8, 1.8, 3.1, 1.3, 0.8, 3.5], vertical_alignment="center", gap="small")
-    with source_group:
-        with st.container(key="obs-source-filter"):
-            source_label, source_column = st.columns([0.65, 1.35], gap=None, vertical_alignment="center")
-    with provider_group:
-        with st.container(key="obs-provider-filter"):
-            provider_label, provider_column = st.columns([0.8, 1.1], gap=None, vertical_alignment="center")
-    source_label.markdown("**Quelle:**")
-    model_label = provider_label.empty()
-    model_label.markdown("**Modell:**")
+    source_column = source_group
+    provider_column = provider_group
     title_column.markdown("### Observation")
     if test_column.button("Test"):
         st.session_state.pop("observation_test_response", None)
@@ -536,7 +529,7 @@ def render():
     if st.session_state.get("observation_test_open"):
         test_dialog()
     source = source_column.selectbox("Quelle", ["Alle", "application", "evaluation"], label_visibility="collapsed",
-                          format_func=lambda value: {"Alle": "Alle", "application": "Ticketanfragen",
+                          format_func=lambda value: {"Alle": "Alle Quellen", "application": "Ticketanfragen",
                                                       "evaluation": "Evaluationen"}[value])
     refresh_column.button("Aktualisieren", width="stretch")
     view = view_column.radio("Ansicht", ["Anfragen", "Modelle & Limits"], horizontal=True, label_visibility="collapsed")
