@@ -5,14 +5,14 @@ still missing. For commands, see the Evaluation section in the README.
 
 ## Scope
 
-The evaluation lives in `evaluation/` and only ever *reads* the backend:
+The evaluation lives in `backend/evaluation/` and only ever *reads* the backend:
 
 - `evaluate.py` — sampling, measurement, metrics, CSV export
 - `dashboard.py` — Streamlit view of the results
 
 It imports `predict_ticket` and `dataset_label_for` from
-`backend/classifier.py`, `load_dataset` from `backend/data_loader.py` and
-`classify_with_gemini` from `backend/llm_classifier.py`. No backend file is
+`backend/classifier.py`, `load_dataset` from `backend/data/data_loader.py` and
+`classify_with_gemini` from `backend/llms/gemini.py`. No backend file is
 modified, no Flask app is started and no SQLite database is touched. The
 dataset CSVs are read only — the sampling happens in memory, so no extra
 dataset file is ever written.
@@ -20,7 +20,7 @@ dataset file is ever written.
 ## Test data
 
 The prepared Bitext splits in `data/processed/`, produced by
-`python backend/prepare_data.py`. Nine labels, 200 rows per label in both
+`python backend/data/prepare_data.py`. Nine labels, 200 rows per label in both
 `validation.csv` and `test.csv` (1,800 rows each). The evaluation only ever
 reads them.
 
@@ -115,7 +115,7 @@ Evaluation sends Bitext dataset texts to the selected provider.
 
 ## Dashboard
 
-`python -m streamlit run evaluation/dashboard.py` shows the KPIs for the
+`(cd backend && python -m streamlit run evaluation/dashboard.py)` shows the KPIs for the
 selected provider and mode, per-label results across versions, a comparison
 chart with target lines (set in `dashboard.py`, not yet agreed in the team),
 the prompt behind each version, all tickets and the misclassifications.
@@ -134,7 +134,7 @@ Two notes for whoever works on it next:
 
 ## Prompt versions V1–V3
 
-`evaluation/prompts.py` is the shared source for both adapters. V1 is the
+`backend/llms/prompts.py` is the shared source for both adapters. V1 is the
 backend default. V2 and V3 initially use the same wording as V1, so they only
 become distinct experiments after you edit their templates. The configured
 nine-label list and shared category guidance from `backend/classifier.py`

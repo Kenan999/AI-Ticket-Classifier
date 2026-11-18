@@ -10,8 +10,8 @@ from urllib.error import URLError
 
 from backend.app import create_app
 from backend.classifier import MODEL_VERSION
-from backend.llm_classifier import LLMError
-from backend.openai_classifier import classify_with_openai, MAX_RESPONSE_BYTES
+from backend.llms.gemini import LLMError
+from backend.llms.openai import classify_with_openai, MAX_RESPONSE_BYTES
 
 
 def response(category="ACCOUNT", confidence=.91):
@@ -47,7 +47,7 @@ class OpenAIIntegrationTests(unittest.TestCase):
             self.assertEqual(json.loads(payload["messages"][1]["content"])["ticket"],
                              "My package has not arrived")
             return response()
-        with patch("backend.openai_classifier.urlopen", side_effect=fake_open) as request:
+        with patch("backend.llms.openai.urlopen", side_effect=fake_open) as request:
             result = self.classify()
         request.assert_called_once()
         self.assertEqual(result.status_code, 200)
@@ -60,20 +60,20 @@ class OpenAIIntegrationTests(unittest.TestCase):
 
     def test_missing_key_never_calls_provider(self):
         os.environ.pop("OPENAI_API_KEY")
-        with patch("backend.openai_classifier.urlopen") as request:
+        with patch("backend.llms.openai.urlopen") as request:
             result = self.classify()
         request.assert_not_called()
         self.assertEqual(result.json["model_version"], MODEL_VERSION)
 
     def test_baseline_never_calls_openai_even_with_key(self):
         os.environ["LLM_PROVIDER"] = "baseline"
-        with patch("backend.openai_classifier.urlopen") as request:
+        with patch("backend.llms.openai.urlopen") as request:
             result = self.classify()
         request.assert_not_called()
         self.assertEqual(result.json["model_version"], MODEL_VERSION)
 
     def test_network_failure_falls_back_without_logging_secrets(self):
-        with patch("backend.openai_classifier.urlopen", side_effect=URLError("test-placeholder")):
+        with patch("backend.llms.openai.urlopen", side_effect=URLError("test-placeholder")):
             with self.assertLogs(self.app.logger, level="WARNING") as logs:
                 result = self.classify()
         self.assertEqual(result.status_code, 200)
@@ -85,26 +85,26 @@ class OpenAIIntegrationTests(unittest.TestCase):
         for category, confidence in [("Unknown", .9), ("ACCOUNT", True),
                                      ("ACCOUNT", -1), ("ACCOUNT", 2), ("ACCOUNT", "high")]:
             with self.subTest(category=category, confidence=confidence):
-                with patch("backend.openai_classifier.urlopen", return_value=response(category, confidence)):
+                with patch("backend.llms.openai.urlopen", return_value=response(category, confidence)):
                     result = self.classify()
                 self.assertEqual(result.json["model_version"], MODEL_VERSION)
 
     def test_malformed_or_oversized_response_falls_back(self):
         for body in [b"not json", b"{}", b"x" * (MAX_RESPONSE_BYTES + 1)]:
             with self.subTest(size=len(body)):
-                with patch("backend.openai_classifier.urlopen", return_value=io.BytesIO(body)):
+                with patch("backend.llms.openai.urlopen", return_value=io.BytesIO(body)):
                     result = self.classify()
                 self.assertEqual(result.json["model_version"], MODEL_VERSION)
 
     def test_low_confidence_requires_human_review(self):
-        with patch("backend.openai_classifier.urlopen", return_value=response(confidence=.2)):
+        with patch("backend.llms.openai.urlopen", return_value=response(confidence=.2)):
             result = self.classify()
         self.assertTrue(result.json["review_required"])
         self.assertEqual(result.json["status"], "human_review")
 
     def test_invalid_timeout_avoids_network(self):
         os.environ["LLM_TIMEOUT_SECONDS"] = "invalid"
-        with patch("backend.openai_classifier.urlopen") as request:
+        with patch("backend.llms.openai.urlopen") as request:
             result = self.classify()
         request.assert_not_called()
         self.assertEqual(result.json["model_version"], MODEL_VERSION)

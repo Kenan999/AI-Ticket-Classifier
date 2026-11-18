@@ -2,7 +2,7 @@
 
 Run from the repository root:
 
-    python backend/preprocessing.py
+    python backend/data/preprocessing.py
 
 Steps (each one is a function below):
 
@@ -31,9 +31,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from data_loader import load_dataset
+if __package__:
+    from .data_loader import load_dataset
+else:
+    from data_loader import load_dataset
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 PROCESSED_DIR = REPO_ROOT / "data" / "processed"
 
 SEED = 42

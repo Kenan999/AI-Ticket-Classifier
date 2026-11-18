@@ -10,18 +10,9 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-try:
-    from .classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
-    from .llm_retry import LLMError, read_provider_response
-except ImportError:  # direct execution: python3 backend/app.py
-    import sys
-    from pathlib import Path
-
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
-    from llm_retry import LLMError, read_provider_response
-
-from evaluation.prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+from .retry import LLMError, read_provider_response
+from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
 DEFAULT_MODEL = "gemini-3.5-flash-lite"
