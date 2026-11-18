@@ -265,9 +265,15 @@ def render_sidebar():
             dataset_error = str(exc)
             st.error(dataset_error)
         prompt_controls = st.container()
+        from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
+        model_env = load_env()
+        active_models = {
+            "gemini": model_env.get("GEMINI_MODEL", DEFAULT_MODEL),
+            "openai": model_env.get("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
+        }
         engine = st.selectbox(
-            "3. Verfahren", options=[BASELINE, "gemini", "openai"],
-            format_func=lambda key: {BASELINE: "Lokale Regeln", "gemini": "Gemini", "openai": "OpenAI"}[key],
+            "3. Modell / Verfahren", options=[BASELINE, "gemini", "openai"],
+            format_func=lambda key: "Lokale Regeln (kein LLM)" if key == BASELINE else active_models[key],
             help="Lokale Regeln brauchen keinen Prompt. Gemini und OpenAI benötigen einen API-Key.",
         )
         with prompt_controls:
@@ -280,10 +286,7 @@ def render_sidebar():
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
         provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
         if engine != BASELINE:
-            from backend.evaluation.evaluate import load_env
-            from backend.llms.gemini import DEFAULT_MODEL
-            active_model = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else "gpt-4.1-mini")
-            st.caption(f"Modell für neue Tests: {active_model}")
+            st.info(f"Modell für neue Tests: {active_models[engine]}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
                     key="batch_evaluation", disabled=engine == BASELINE)
         if engine != BASELINE and st.session_state.get("batch_evaluation", True):
@@ -333,12 +336,13 @@ def render_header(results, provider, path, mode=None):
     """Titel, gewaehltes Verfahren und Hinweis zur Datenquelle."""
     title, badge = st.columns([4, 2], vertical_alignment="center")
     title.title("Ticket-Klassifikator – Evaluation")
-    badge.success(PROVIDERS[provider]["label"])
+    models = sorted({display_model(row.get("model_version")) for row in results})
+    badge.success(" · ".join(models))
+    st.caption("Prompt: " + str(PROVIDERS[provider].get("prompt_version", "—")))
     stamp = last_run(path)
-    models = sorted({row["model_version"] for row in results})
     if stamp:
         st.caption(
-            f"Letzte Messung: {stamp} · Modell: {', '.join(models)}"
+            f"Letzte Messung: {stamp}"
         )
     render_data_note(results, mode)
 
@@ -564,6 +568,35 @@ def version_metrics(version, mode=None):
     }
 
 
+def display_model(value):
+    """Remove evaluation metadata from a recorded model identifier for display only."""
+    value = str(value or "Unbekannt")
+    parts = value.split(":")
+    if len(parts) > 1 and parts[0] in {"gemini", "openai"}:
+        value = parts[1]
+    return value
+
+
+def model_label(provider, results=None):
+    if provider == BASELINE:
+        return "Lokale Regeln (kein LLM)"
+    method = PROVIDERS[provider]
+    if results:
+        models = sorted({display_model(row.get("model_version")) for row in results})
+        name = ", ".join(models)
+    else:
+        from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
+        engine = method["provider"]
+        name = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
+
+    return name + " · " + str(method.get("prompt_version", "V1"))
+
+
+def comparison_label(version, measured):
+    data = measured.get(version["key"])
+    return model_label(version["provider"], data["results"] if data else None)
+
+
 def version_table_html(measured):
     """Baut die Vergleichstabelle als HTML.
 
@@ -584,7 +617,7 @@ def version_table_html(measured):
         head_top.append(
             f'<th colspan="3" class="ev-group" '
             f'style="background:{version["tint"]};'
-            f'color:{version["ink"]}">{escape(version["short"])}</th>'
+            f'color:{version["ink"]}">{escape(comparison_label(version, measured))}</th>'
         )
         for metric in ("P", "R", "F1"):
             head_sub.append(
@@ -658,30 +691,30 @@ def version_chart(measured):
     for version in VERSIONS:
         data = measured.get(version["key"])
         if data is None:
-            pending.append({"Version": version["short"], "Hinweis": "offen"})
+            pending.append({"Version": comparison_label(version, measured), "Hinweis": "offen"})
             rows.append({
-                "Version": version["short"],
+                "Version": comparison_label(version, measured),
                 "Kennzahl": "Accuracy",
                 "Wert": None,
             })
             rows.append({
-                "Version": version["short"],
+                "Version": comparison_label(version, measured),
                 "Kennzahl": "Macro-F1",
                 "Wert": None,
             })
             continue
         rows.append({
-            "Version": version["short"],
+            "Version": comparison_label(version, measured),
             "Kennzahl": "Accuracy",
             "Wert": round(data["accuracy"], 2),
         })
         rows.append({
-            "Version": version["short"],
+            "Version": comparison_label(version, measured),
             "Kennzahl": "Macro-F1",
             "Wert": round(data["macro_f1"], 2),
         })
     frame = pd.DataFrame(rows)
-    axis_order = [version["short"] for version in VERSIONS]
+    axis_order = [comparison_label(version, measured) for version in VERSIONS]
     order = ["Accuracy", "Macro-F1"]
     base = alt.Chart(frame).encode(
         x=alt.X(
@@ -951,7 +984,7 @@ def render_matrix_comparison(mode):
     done = set(measured)
 
     def label_of(key):
-        label = PROVIDERS[key]["label"]
+        label = model_label(key, load_results(results_path(key, mode, batch=st.session_state.get("batch_evaluation", True))))
         return label if key in done else f"{label} · noch nicht gemessen"
 
     def matrix_of(key):
@@ -1021,7 +1054,7 @@ def render_version_comparison(mode=None):
         if data is not None:
             measured[version["key"]] = data
 
-    missing = [v["short"] for v in VERSIONS if v["key"] not in measured]
+    missing = [comparison_label(v, measured) for v in VERSIONS if v["key"] not in measured]
 
     st.subheader("Ergebnisse pro Kategorie und Version")
     st.caption(
@@ -1031,7 +1064,7 @@ def render_version_comparison(mode=None):
     st.html(version_table_html(measured))
     if missing:
         st.caption(
-            "Keine auswertbaren Ergebnisse: " + ", ".join(missing)
+            "Ohne Messung (angezeigtes Modell ist konfiguriert): " + ", ".join(missing)
             + ". Sobald eine Version eine Ergebnisdatei hat, füllen "
             "sich Tabelle und Diagramm von selbst."
         )
@@ -1072,7 +1105,7 @@ def main():
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
-            f"Für \"{PROVIDERS[provider]['label']}\" mit der Quelle "
+            f"Für \"{model_label(provider)}\" mit der Quelle "
             f"\"{MODES[mode]['label']}\" gibt es noch keine Ergebnisse. "
             "Bitte links auf \"Evaluation neu ausführen\" klicken."
         )
