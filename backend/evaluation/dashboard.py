@@ -984,7 +984,8 @@ def render_matrix_comparison(mode):
     done = set(measured)
 
     def label_of(key):
-        label = model_label(key, load_results(results_path(key, mode, batch=st.session_state.get("batch_evaluation", True))))
+        path = results_path(key, mode, batch=st.session_state.get("batch_evaluation", True))
+        label = model_label(key, load_results(path) if path.is_file() else None)
         return label if key in done else f"{label} · noch nicht gemessen"
 
     def matrix_of(key):
