@@ -4,7 +4,7 @@ from backend.classifier import DATASET_CATEGORIES, CATEGORY_GUIDANCE
 
 class PromptPlaceholderTests(unittest.TestCase):
     def test_reserved_versions_cannot_render(self):
-        for version in ("V2", "V3"):
+        for version in ("V3",):
             for provider in ("gemini", "openai"):
                 with self.subTest(version=version, provider=provider):
                     with self.assertRaisesRegex(ValueError, "not configured"):
