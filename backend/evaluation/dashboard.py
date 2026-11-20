@@ -302,7 +302,7 @@ def render_sidebar():
             version = st.selectbox(
                 "2. Prompt-Version", options=["V1", "V2", "V3"],
                 disabled=engine == BASELINE,
-                help="V2 und V3 bleiben gesperrt, bis ihre Prompts eingetragen sind.",
+                help="Versionen ohne konfigurierten Prompt bleiben gesperrt.",
             )
             if engine == BASELINE:
                 st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
@@ -855,11 +855,18 @@ def prompt_texts(version):
     und OpenAI derselbe Text, erscheint er nur einmal. Leere Eintraege
     gelten als noch nicht definiert.
     """
-    from backend.llms.prompts import PROMPTS
+    from backend.keyword_classifier import CATEGORY_GUIDANCE
+    from backend.evaluation.evaluate import load_env
+    from backend.llms.gemini import configured_categories
+    from backend.llms.prompts import PROMPTS, render_prompt
 
+    categories = configured_categories(load_env().get("LLM_CATEGORIES", ""))
     found = {}
-    for provider, text in PROMPTS.get(version, {}).items():
-        if text.strip():
+    for provider, template in PROMPTS.get(version, {}).items():
+        if template.strip():
+            text = render_prompt(
+                version, provider, categories, category_guidance=CATEGORY_GUIDANCE,
+            )
             found.setdefault(text, []).append(provider)
     return found
 
@@ -1151,4 +1158,5 @@ def render_backlog():
         st.markdown(BACKLOG)
 
 
-main()
+if __name__ == "__main__":
+    main()
