@@ -71,7 +71,7 @@ python -m backend.evaluation.evaluate --mode validation
 python -m backend.evaluation.evaluate --mode final
 python -m backend.evaluation.evaluate --provider gemini-v1 --mode validation
 python -m backend.evaluation.evaluate --provider openai-v1 --mode validation
-(cd backend && python -m streamlit run evaluation/dashboard.py)   # 127.0.0.1:8501
+(cd backend && python -m streamlit run ai_operations.py)   # 127.0.0.1:8501
 ```
 
 Gemini and OpenAI reuse their backend adapters and the shared system prompts
@@ -142,11 +142,13 @@ Main serves its frontend from `frontend/` and routes live requests through
 `/api`. Local previews can set `apiBaseUrl` in their runtime configuration.
 The Human Review correction menu sends the exact nine Bitext labels.
 
-**AI Operations** next to **Reload** opens the evaluation dashboard in a new tab.
+**AI Operations** next to **Reload** opens Evaluation in a new tab. Locally, the
+shared header also provides Observation; each dashboard retains its own data.
 On `localhost` or `127.0.0.1`, it automatically uses `http://127.0.0.1:8501`;
 on the deployed site, it uses the same site’s `/evaluation/` route. No config
 edit is needed when switching between those environments. Start the local
-evaluation service separately with `python -m streamlit run evaluation/dashboard.py`.
+AI Operations service separately from the repository root with
+`(cd backend && python -m streamlit run ai_operations.py)`.
 Optional `evaluationUrl` runtime configuration overrides the default for custom
 setups; an empty string hides the link.
 
@@ -325,13 +327,16 @@ baseline remains in `backend/keyword_classifier.py`.
 
 ## Backend workspace
 
-Backend owns `requirements.txt`, `tests/`, `evaluation/`, `docs/`, and
+Backend owns `requirements.txt`, `tests/`, `evaluation/`, `observation/`, `docs/`, and
 `.streamlit/`. Data and generated results remain at the repository root.
 From the repository root, install with `python -m pip install -r backend/requirements.txt`
 and test with `python -m unittest discover -s backend/tests -v`.
 Start the dashboard with `cd backend` then
-`python -m streamlit run evaluation/dashboard.py` so Streamlit loads the backend
-configuration. The dashboard locates the repository and data independently of the working directory.
+`python -m streamlit run ai_operations.py` so Streamlit loads the backend
+configuration and shared Evaluation/Observation navigation. Both dashboards
+locate the repository and data independently of the working directory.
+For Evaluation alone, run `python -m streamlit run evaluation/dashboard.py`
+from the same directory.
 
 ## Development workflow
 
