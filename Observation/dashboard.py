@@ -426,7 +426,7 @@ def model_overview():
 def render():
     st.set_page_config(page_title="Observation", page_icon="🔎", layout="wide")
     st.html("""<style>
-    .stMainBlockContainer {padding-top: 4rem; padding-bottom: 1rem;}
+    .stMainBlockContainer {padding-bottom: 1rem;}
     [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"]
     [data-testid="stIconMaterial"] {
         font-size: 1.45rem;
@@ -485,15 +485,6 @@ def render():
     }
     [data-testid="stExpander"] summary:has(img[alt^="loop-"]) {
         overflow-x: auto;
-    }
-    .st-key-observation-toolbar {
-        position: fixed;
-        top: 0.5rem;
-        left: 2rem;
-        right: 6rem;
-        width: auto;
-        z-index: 1000001;
-        background: transparent;
     }
     .st-key-obs-provider-filter img[alt="openai"],
     [class*="st-key-obs-model-option-"] img[alt="openai"] {
