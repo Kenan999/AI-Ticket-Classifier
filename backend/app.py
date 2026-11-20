@@ -222,6 +222,8 @@ def create_app(review_path=None, case_db_path=None):
             store_case(case)
         return jsonify(review_result)
 
+    from backend.observation.integration import install_flask
+    install_flask(app)
     return app
 
 

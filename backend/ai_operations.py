@@ -19,7 +19,9 @@ st.html("""<style>
         top: 1.875rem;
         left: 50%;
         transform: translate(-50%, -50%);
-        width: max-content;
+        /* A definite width prevents overflow measurement from shrinking to "2 more". */
+        width: 20rem;
+        justify-content: center;
         max-width: calc(100% - 8rem);
         margin: 0;
     }
@@ -36,4 +38,7 @@ page = st.navigation(
     ],
     position="top",
 )
+from backend.observation.integration import install_evaluation
+
+install_evaluation()
 page.run()

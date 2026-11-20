@@ -49,5 +49,14 @@
       "source": "https://aistudio.google.com/docs/models/gemini-3.5-flash-lite",
       "checked": "2026-11-17"
     }
+  },
+  "recording": {
+    "enabled": true,
+    "sources": [
+      "application",
+      "evaluation"
+    ],
+    "sqlite_timeout_seconds": 0.05,
+    "max_content_bytes": 65536
   }
 }

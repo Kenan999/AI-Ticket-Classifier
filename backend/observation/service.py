@@ -8,18 +8,7 @@ from pathlib import Path
 
 from flask import Flask, abort, jsonify, request
 from backend.observation.database import DEFAULT_CONFIG, initialize_database
-
-
-def clean(value):
-    """Remove credential fields recursively; clients must not send headers/secrets."""
-    if isinstance(value, dict):
-        return {k: clean(v) for k, v in value.items()
-                if k.lower().replace("-", "_") not in {
-                    "authorization", "api_key", "apikey", "x_goog_api_key",
-                    "token", "access_token", "password", "secret", "headers", "cookie"}}
-    if isinstance(value, list):
-        return [clean(v) for v in value]
-    return value
+from backend.observation.store import clean, schema
 
 
 def create_app(config_path=DEFAULT_CONFIG):
@@ -27,18 +16,7 @@ def create_app(config_path=DEFAULT_CONFIG):
     app.config["MAX_CONTENT_LENGTH"] = 1024 * 1024
     path = initialize_database(config_path)
     with closing(sqlite3.connect(path)) as db, db:
-        db.execute("""CREATE TABLE IF NOT EXISTS observations (
-            id TEXT PRIMARY KEY, source TEXT NOT NULL,
-            provider TEXT NOT NULL, model TEXT NOT NULL,
-            request_json TEXT NOT NULL, response_json TEXT,
-            error_json TEXT, created_at TEXT NOT NULL, completed_at TEXT
-        )""")
-
-    with closing(sqlite3.connect(path)) as db, db:
-        columns = {row[1] for row in db.execute("PRAGMA table_info(observations)")}
-        if "run_id" not in columns:
-            db.execute("ALTER TABLE observations ADD COLUMN run_id TEXT")
-        db.execute("CREATE INDEX IF NOT EXISTS observations_run ON observations(run_id)")
+        schema(db)
 
     def body():
         value = request.get_json()
