@@ -181,11 +181,6 @@ class VersionedEvaluationTests(unittest.TestCase):
                     ), patch(urlopen, return_value=io.BytesIO(json.dumps(payload).encode())) as send:
                         rows = evaluate.run_evaluation([ticket], provider=f"{provider}-{version.lower()}")
 
-                    if version == "V3":
-                        send.assert_not_called()
-                        self.assertIn("not configured", rows[0]["error"])
-                        self.assertFalse(rows[0]["correct"])
-                        continue
                     send.assert_called_once()
                     request = json.loads(send.call_args.args[0].data)
                     if provider == "gemini":

@@ -13,7 +13,7 @@ from backend.llms.prompts import CATEGORY_GUIDANCE_V2, render_prompt
 class DashboardPromptTests(unittest.TestCase):
     @patch("backend.evaluation.evaluate.load_env", return_value={})
     def test_cards_match_rendered_provider_prompts(self, _load_env):
-        for version in ("V1", "V2"):
+        for version in ("V1", "V2", "V3"):
             found = prompt_texts(version)
             for provider in ("gemini", "openai"):
                 with self.subTest(version=version, provider=provider):
@@ -24,7 +24,7 @@ class DashboardPromptTests(unittest.TestCase):
                     self.assertIn(provider, found[expected])
                     self.assertNotIn("{categories}", expected)
         self.assertNotEqual(prompt_texts("V1"), prompt_texts("V2"))
-        self.assertEqual(prompt_texts("V3"), {})
+        self.assertNotEqual(prompt_texts("V2"), prompt_texts("V3"))
 
     @patch("backend.evaluation.evaluate.load_env", return_value={})
     def test_v2_card_displays_guidance_and_highlights_changes(self, _load_env):
@@ -41,4 +41,4 @@ class DashboardPromptTests(unittest.TestCase):
         self.assertNotEqual(html[0], html[1])
         self.assertIn("<span", html[2])
         self.assertIn("delivery address", html[2])
-        self.assertIn("_Noch nicht definiert_", [item.value for item in app.markdown])
+        self.assertIn(escape(CATEGORY_GUIDANCE_V2), html[3])
