@@ -9,7 +9,7 @@ from urllib.request import Request, urlopen
 
 GEMINI_MODEL = 'gemini-embedding-001'
 OPENAI_MODEL = 'text-embedding-3-small'
-LOCAL_MODEL = 'local-embedding-model'
+LOCAL_MODEL = 'multilingual-e5-small'
 
 
 def model_name(provider):
@@ -45,7 +45,7 @@ def embed(text, task_type, provider='gemini', *, credentials=None):
         parts = urlsplit(url)
         if parts.scheme != 'http' or parts.hostname not in ('localhost', '127.0.0.1') or not parts.port or parts.username or parts.password or parts.query or parts.fragment or parts.path != '/v1/embeddings':
             raise ValueError('Local embedding endpoint must be a loopback /v1/embeddings URL')
-        payload = {'model': model, 'input': text}
+        payload = {'model': model, 'input': text, 'task_type': task_type}
         headers = {'Content-Type': 'application/json'}
     else:
         raise ValueError('Unsupported embedding provider')

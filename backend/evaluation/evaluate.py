@@ -31,6 +31,7 @@ from pathlib import Path
 import pandas as pd
 
 from backend.tickets.categories import dataset_label_for, CATEGORY_GUIDANCE
+from backend.evaluation.baseline import predict_ticket
 from backend.data.data_loader import load_dataset
 from backend.llms.gemini import (
     DEFAULT_MODEL,
@@ -74,9 +75,11 @@ SAMPLE_SEED = 42
 
 # Verfahren, die gemessen werden koennen. Jedes schreibt in eine eigene
 # Datei, damit ein Lauf nie das Ergebnis des anderen ueberschreibt.
+BASELINE = "baseline"
 GEMINI = "gemini"
 LOCAL = "local"
 PROVIDERS = {
+    BASELINE: {"label": "Regeln (V0)", "suffix": "v0"},
     LOCAL: {"label": "Local Qwen3-4B", "suffix": "local", "provider": LOCAL, "prompt_version": DEFAULT_PROMPT_VERSION},
     GEMINI: {
         "label": "Gemini (Standard)",
@@ -246,7 +249,7 @@ def load_mode_tickets(mode, seed=SAMPLE_SEED):
     return tickets, info
 
 
-def classify_ticket(text, provider="local", env=None):
+def classify_ticket(text, provider=BASELINE, env=None):
     """Klassifiziert einen Text mit dem gewaehlten Verfahren.
 
     Gibt (category, confidence, model_version, error) zurueck.
@@ -255,6 +258,9 @@ def classify_ticket(text, provider="local", env=None):
     sonst waere das Ergebnis eine Mischung aus beiden Verfahren.
     """
     method = PROVIDERS[provider]
+    if provider == BASELINE:
+        prediction = predict_ticket(text)
+        return prediction.category, prediction.confidence, prediction.model_version, ""
 
     env = env if env is not None else load_env()
     name = method["provider"]
@@ -301,20 +307,20 @@ def classify_ticket(text, provider="local", env=None):
             prediction.model_version, "")
 
 
-def run_evaluation(tickets, provider="local", *, batch=False, progress=None):
+def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
     """Misst alle Tickets mit dem gewaehlten Verfahren.
 
     Ground Truth ist das Label des Datensatzes, die Antwort des
     Klassifikators wird dafuer in ein Label uebersetzt.
     """
-    env = load_env()
+    env = {} if provider == BASELINE else load_env()
     prompt_version = PROVIDERS[provider].get("prompt_version", "")
     mapping = category_to_label()
-    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS))
+    interval = 0 if provider == BASELINE else float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS))
     if not math.isfinite(interval) or not 0 <= interval <= 600:
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None
-    if batch:
+    if batch and provider != BASELINE:
         if PROVIDERS[provider].get("provider") == LOCAL:
             from backend.evaluation.local_batch import run
         else:

@@ -1,0 +1,3 @@
+# Optional, manually installed only for the project-owned local embedding service.
+# Inspect and lock resolved transitive dependencies before deploying.
+sentence-transformers>=3,<6

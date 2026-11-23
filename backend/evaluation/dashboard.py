@@ -77,7 +77,7 @@ VERSIONS = [
             "prompt": "Prompt-Text in backend/llms/prompts.py.",
         }
         for key, method in PROVIDERS.items()
-        if key != GEMINI
+        if key != GEMINI and "provider" in method
     ),
 ]
 
@@ -281,7 +281,7 @@ def render_sidebar():
         engine = st.selectbox(
             "3. Modell / Verfahren", options=list(active_models),
             format_func=lambda key: active_models[key],
-            help="Lokale Regeln brauchen keinen Prompt. Gemini und OpenAI benötigen einen API-Key.",
+            help="Gemini und OpenAI benötigen einen API-Key.",
         )
         with prompt_controls:
             version = st.selectbox(
@@ -294,7 +294,7 @@ def render_sidebar():
             st.info(f"Modell für neue Tests: {active_models[engine]}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
                     key="batch_evaluation", disabled=False)
-        if True and st.session_state.get("batch_evaluation", True):
+        if st.session_state.get("batch_evaluation", True):
             st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
         supported = provider in PROVIDERS
         prompt_missing = (missing_prompt_message(provider) if supported else

@@ -88,12 +88,23 @@ def reply(session_id, question, order_number=None):
                     'or Markdown links. Do not print raw URLs or duplicate attachment links in the answer; '
                     'the interface displays tool-returned PDF files as clickable attachments. '
                     'Avoid repeating invoice details unnecessarily. Do not claim a PDF is attached unless the tool returned it.')
+    # A duplicate charge is a payment issue, not an invoice request. Do not
+    # offer invoice tools or fabricate invoice attachments for payment disputes.
+    payment_dispute = bool(re.search(
+        r'\b(charged twice|paid twice|double charg(?:e|ed)|duplicate (?:charge|payment)|'
+        r'charged two times|doppelt (?:bezahlt|abgebucht)|zweimal (?:bezahlt|abgebucht))\b',
+        question, re.IGNORECASE))
+    if payment_dispute:
+        instructions += ('\nThe customer reports a duplicate payment. Address the PAYMENT issue directly. '
+                         'Do not offer an invoice or call invoice tools unless the customer explicitly asks '
+                         'for an invoice. Do not claim you can verify or reverse charges without a payment '
+                         'transaction tool. Ask for the affected order and recommend human payment support.')
     if policy['context']:
         instructions += '\n\n' + policy['context']
     if provider=='local':
-        return local_reply(session_id,question,user['id'],history,orders,instructions)
+        return local_reply(session_id,question,user['id'],history,orders,instructions,allow_invoice=not payment_dispute)
     if provider=='openai':
-        return openai_reply(session_id,question,user['id'],history,orders,instructions,config_values)
+        return openai_reply(session_id,question,user['id'],history,orders,instructions,config_values,allow_invoice=not payment_dispute)
     contents = [{'role': 'user' if h['role']=='user' else 'model', 'parts': [{'text': h['content']}]} for h in history]
     contents.append({'role': 'user', 'parts': [{'text': question}]})
     payload = {'systemInstruction': {'parts': [{'text': instructions + '\nVerified orders: ' + json.dumps(orders)}]},
@@ -159,13 +170,13 @@ def reply(session_id, question, order_number=None):
         raise
 
 
-def openai_reply(session_id, question, user_id, history, orders, instructions, config):
+def openai_reply(session_id, question, user_id, history, orders, instructions, config, allow_invoice=True):
     """OpenAI Chat Completions with the same customer-scoped order/invoice tools."""
     key=os.getenv('OPENAI_API_KEY') or config.get('OPENAI_API_KEY')
     model=os.getenv('OPENAI_MODEL') or config.get('OPENAI_MODEL','gpt-4.1-mini')
     if not key:raise RuntimeError('OpenAI API key not configured')
     if not re.fullmatch('[A-Za-z0-9._-]+',model):raise RuntimeError('Invalid OpenAI model')
-    declarations=INVOICE_DECLARATION['functionDeclarations']+ORDER_DECLARATION['functionDeclarations']
+    declarations=(INVOICE_DECLARATION['functionDeclarations'] if allow_invoice else [])+ORDER_DECLARATION['functionDeclarations']
     tools=[]
     for item in declarations:
         params=json.loads(json.dumps(item['parameters']))
@@ -214,11 +225,11 @@ def openai_reply(session_id, question, user_id, history, orders, instructions, c
         raise
 
 
-def local_reply(session_id, question, user_id, history, orders, instructions):
+def local_reply(session_id, question, user_id, history, orders, instructions, allow_invoice=True):
     """Customer-scoped tool calling via the local MLX OpenAI-compatible endpoint."""
     endpoint = 'http://127.0.0.1:18642/v1/chat/completions'
     model = 'mlx-community/Qwen3-4B-Instruct-2507-4bit'
-    declarations = INVOICE_DECLARATION['functionDeclarations'] + ORDER_DECLARATION['functionDeclarations']
+    declarations = (INVOICE_DECLARATION['functionDeclarations'] if allow_invoice else []) + ORDER_DECLARATION['functionDeclarations']
     tools = []
     for item in declarations:
         params = item['parameters'].copy()

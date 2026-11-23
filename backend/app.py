@@ -19,7 +19,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.tickets import case_storage
-from backend.tickets.categories import REVIEW_THRESHOLD, dataset_label_for
+from backend.tickets.categories import dataset_label_for
+from backend.review_threshold import get_threshold
 from backend.tickets.replies import suggest_customer_reply
 from backend.tickets.review import ReviewError, save_review
 from backend.llms.openai.config import openai_api_key
@@ -27,6 +28,22 @@ from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
+
+def load_shared_provider_credentials():
+    """Use the existing local chat credentials for classifier providers too."""
+    source = Path(os.getenv('IHK_PROVIDER_ENV_FILE', str(Path(__file__).resolve().parents[2] / 'AI-Ticket-Classifier-Backend' / 'backend' / '.env')))
+    if not source.is_file():
+        return
+    for line in source.read_text().splitlines():
+        if '=' not in line or line.lstrip().startswith('#'):
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        if key in ('OPENAI_API_KEY', 'GEMINI_API_KEY', 'OPENAI_MODEL', 'GEMINI_MODEL'):
+            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
+load_shared_provider_credentials()
 
 PROVIDERS = ("openai", "gemini", "local")
 
@@ -60,7 +77,8 @@ def create_app(review_path=None, case_db_path=None):
         for origin in os.getenv(
             "FRONTEND_ORIGINS",
             "http://localhost:8000,http://127.0.0.1:8000,"
-            "http://localhost:5173,http://127.0.0.1:5173",
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:8015,http://127.0.0.1:8015",
         ).split(",")
         if origin.strip()
     }
@@ -152,7 +170,7 @@ def create_app(review_path=None, case_db_path=None):
                         return error("provider_unavailable", "Selected provider could not classify the ticket", 502)
         if prediction is None:
             return error("provider_unavailable", "Selected model could not classify the ticket", 502)
-        review_required = prediction.confidence < REVIEW_THRESHOLD
+        review_required = prediction.confidence < get_threshold()
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
             "ticket_id": ticket_id,

@@ -25,3 +25,5 @@ results/
 !backend/data/*.py
 
 .venv-local-llm/
+
+.venv-local-embeddings/
