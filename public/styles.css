@@ -713,3 +713,22 @@ button:hover {
 #staff-settings-panel button.staff-api-refresh{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;flex:0 0 36px;width:36px;min-width:36px;max-width:36px;height:36px;min-height:36px;padding:0;margin:0;font-size:0;line-height:1;appearance:none}
 #staff-settings-panel button.staff-api-refresh svg{width:18px;height:18px;display:block;stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
 #staff-settings-panel button.staff-api-refresh:focus-visible{outline:2px solid #8af0b1;outline-offset:3px}
+
+/* Support Center: keep all records inside the dashboard viewport.
+   Conversations and the ticket groups share one vertical scroll container. */
+.screen-staff { min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.screen-staff > .staff-head { flex: 0 0 auto; }
+.screen-staff > #staff-settings-panel,
+.screen-staff > #staff-chat-panel,
+.screen-staff > #staff-ticket-sections { flex: 0 0 auto; min-width: 0; width: 100%; }
+#staff-ticket-sections { display: flex; flex-direction: column; gap: 12px; }
+#staff-ticket-sections > .dash-section { flex: 0 0 auto; min-width: 0; margin-top: 0; }
+#staff-ticket-sections .ticket-list { flex: 0 1 auto; max-height: min(36dvh, 340px); overflow-y: auto; overflow-x: hidden; }
+.screen-staff .ticket, .screen-staff .ticket-message,
+.screen-staff .staff-chat-request, .screen-staff .staff-chat-message,
+.screen-staff .staff-chat-content { min-width: 0; overflow-wrap: anywhere; word-break: normal; }
+.screen-staff .ticket-head, .screen-staff .ticket-chips { min-width: 0; max-width: 100%; }
+@media (max-width: 859px) {
+  .screen-staff { max-height: min(780px, calc(100dvh - 155px)); }
+  #staff-ticket-sections .ticket-list { max-height: 260px; }
+}

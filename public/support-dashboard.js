@@ -10,9 +10,10 @@
   const form=document.getElementById('staff-chat-form');
   const input=document.getElementById('staff-chat-input');
   let selected=null;let lastMessage=0;
-  const tabChat=document.getElementById('staff-chat-tab');
-  function view(chat){window.dispatchEvent(new Event('shoply:chat-view'));tickets.hidden=chat;panel.hidden=!chat;tabChat.classList.toggle('staff-view-active',chat);tabChat.setAttribute('aria-pressed',String(chat))}
-  tabChat.onclick=()=>view(panel.hidden);
+  function view(){
+    document.getElementById('staff-settings-panel').hidden=true;
+    tickets.hidden=false;panel.hidden=false;
+  }
   async function api(path,data){
     const response=await fetch(base+path,data?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}:{cache:'no-store'});
     const result=await response.json();if(!response.ok)throw Error(result.error||'Support request failed');return result;
@@ -41,7 +42,7 @@
         const row=document.createElement('div');row.className='staff-chat-request';
         const label=document.createElement('span');label.textContent='Customer '+item.id.slice(0,8)+' · '+(item.status==='waiting'?'Waiting':'Connected');
         const button=document.createElement('button');button.type='button';button.textContent=item.status==='waiting'?'Accept Chat':'Open Chat';
-        button.onclick=async()=>{try{if(item.status==='waiting')await api('/api/support/accept',{id:item.id});selected=item.id;lastMessage=0;messages.replaceChildren();conversation.hidden=false;document.getElementById('staff-chat-heading').textContent='Customer '+item.id.slice(0,8);view(true);await refresh()}catch(err){alert(err.message)}};
+        button.onclick=async()=>{try{if(item.status==='waiting')await api('/api/support/accept',{id:item.id});selected=item.id;lastMessage=0;messages.replaceChildren();conversation.hidden=false;document.getElementById('staff-chat-heading').textContent='Customer '+item.id.slice(0,8);view();await refresh()}catch(err){alert(err.message)}};
         row.append(label,button);queue.append(row);
       }
       if(selected){
@@ -58,6 +59,8 @@
   const start=navigation?.type==='reload'
     ? api('/api/support/reset-demo',{reset:true}).catch(error=>console.warn('Could not close demo chats:',error))
     : Promise.resolve();
+  // The shared Classified Tickets / Human Review lists own chat-ticket rendering.
+  // Keep the original support conversation queue and employee chat UI.
   start.then(refresh);
   setInterval(refresh,1500);
 })();

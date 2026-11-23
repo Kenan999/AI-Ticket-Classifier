@@ -14,6 +14,8 @@ const STATUS_HUMAN_REVIEW = "human_review";
 const STATUS_LABELS = {
   classified: "Classified",
   human_review: "Needs review",
+  classifying: "Classifying",
+  waiting: "Waiting",
   reviewed: "Manually reviewed",
 };
 
@@ -42,6 +44,7 @@ const EXAMPLE_TICKETS = [
 const state = {
   classified: [],
   review: [],
+  progress: [],
 };
 
 const form = document.getElementById("ticket-form");
@@ -145,8 +148,30 @@ function toTicket(result) {
 async function loadTickets() {
   const cases = await apiRequest("/cases");
   const tickets = cases.map(toTicket);
+  // Chat-originated tickets use the same card renderer and ticket lists.
+  const chatApi=window.APP_CONFIG?.chatApiBase||(localHost?'http://127.0.0.1:8016':window.location.origin);
+  try{
+    const response=await fetch(chatApi+'/api/chat/tickets',{cache:'no-store'});
+    if(!response.ok)throw Error('Chat tickets unavailable');
+    const data=await response.json();
+    for(const item of data.tickets){
+      if(!['classified','human_review','classifying','waiting'].includes(item.status))continue;
+      tickets.push({
+        id:'T-'+item.id.slice(0,12).toUpperCase(),
+        message:item.message,
+        category:item.category,
+        confidence:item.confidence==null?null:Math.round(item.confidence*100),
+        status:item.status,
+        source:'chat',
+        chatTicketId:item.id,
+        supportRequestId:item.support_request_id,
+        supportStatus:item.support_status
+      });
+    }
+  }catch(error){console.warn('Chat tickets could not be loaded:',error);}
+  state.progress = tickets.filter((ticket) => ticket.status === "classifying" || ticket.status === "waiting");
   state.review = tickets.filter((ticket) => ticket.status === STATUS_HUMAN_REVIEW);
-  state.classified = tickets.filter((ticket) => ticket.status !== STATUS_HUMAN_REVIEW);
+  state.classified = tickets.filter((ticket) => ticket.status === "classified" || ticket.status === "reviewed");
 }
 
 // POST /review: a human confirms ("approve") or changes ("correct") the category.
@@ -205,9 +230,15 @@ function createTicketCard(ticket) {
   message.textContent = ticket.message;
 
   card.append(head, message);
+  if(ticket.supportRequestId){
+    const detail=document.createElement('p');
+    detail.className='ticket-message';
+    detail.textContent='Support: '+(ticket.supportStatus==='active'?'Agent connected':ticket.supportStatus==='closed'?'Conversation ended':'Awaiting agent reply');
+    card.append(detail);
+  }
 
   // Only tickets waiting for a human get the review buttons.
-  if (ticket.status === STATUS_HUMAN_REVIEW) {
+  if (ticket.status === STATUS_HUMAN_REVIEW && ticket.source !== "chat") {
     card.append(createReviewActions(ticket));
   }
 
@@ -289,6 +320,8 @@ function renderList(listEl, tickets, emptyText, isError = false) {
 }
 
 function renderDashboard() {
+  document.getElementById("progress-count").textContent = state.progress.length;
+  renderList(document.getElementById("progress-list"), state.progress, "No tickets in progress.");
   document.getElementById("classified-count").textContent = state.classified.length;
   document.getElementById("review-count").textContent = state.review.length;
   renderList(classifiedList, state.classified, "No tickets yet. New tickets will show up here.");
@@ -372,6 +405,8 @@ EXAMPLE_TICKETS.forEach((example) => {
 renderDashboard();
 checkBackendHealth();
 reloadTickets();
+// Keep Support Center synchronized with new customer chat tickets.
+setInterval(()=>{if(!document.hidden)reloadTickets();},1200);
 
 // Loads the saved tickets and shows them. Used on page open and by the Reload button.
 async function reloadTickets() {
@@ -383,6 +418,7 @@ async function reloadTickets() {
     // Simple red error message in both lists if the tickets cannot be loaded.
     state.classified = [];
     state.review = [];
+    state.progress = [];
     renderDashboard();
     renderList(classifiedList, [], error.message, true);
     renderList(reviewList, [], error.message, true);

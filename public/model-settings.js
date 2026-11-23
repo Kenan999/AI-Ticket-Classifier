@@ -2,7 +2,6 @@
 (()=>{
   const panel=document.getElementById('staff-settings-panel');
   const toggle=document.getElementById('staff-settings-tab');
-  const ticketButton=document.getElementById('staff-tickets-tab');
   const select=document.getElementById('staff-model-select');
   const current=document.getElementById('staff-model-current');
   const error=document.getElementById('staff-model-error');
@@ -10,46 +9,80 @@
   const key='shoply-ticket-provider';
   const tickets=document.getElementById('staff-ticket-sections');
   const chat=document.getElementById('staff-chat-panel');
-  const chatButton=document.getElementById('staff-chat-tab');
   function showSettings(){
     const open=panel.hidden;
     panel.hidden=!open;
     tickets.hidden=open;
-    chat.hidden=true;
+    chat.hidden=open;
     toggle.setAttribute('aria-expanded',String(open));
-    chatButton.setAttribute('aria-pressed','false');
-    chatButton.classList.remove('staff-view-active');
-    ticketButton.setAttribute('aria-pressed',String(!open));
-    ticketButton.classList.toggle('staff-view-active',!open);
   }
   toggle.addEventListener('click',showSettings);
-  ticketButton.addEventListener('click',()=>{panel.hidden=true;chat.hidden=true;tickets.hidden=false;toggle.setAttribute('aria-expanded','false');chatButton.setAttribute('aria-pressed','false');chatButton.classList.remove('staff-view-active');ticketButton.setAttribute('aria-pressed','true');ticketButton.classList.add('staff-view-active')});
-  window.addEventListener('shoply:chat-view',()=>{panel.hidden=true;toggle.setAttribute('aria-expanded','false');ticketButton.setAttribute('aria-pressed','false');ticketButton.classList.remove('staff-view-active')});
-  async function load(){
+  const thresholdSlider=document.getElementById('review-threshold-slider');
+  const thresholdValue=document.getElementById('review-threshold-value');
+  const thresholdStatus=document.getElementById('review-threshold-status');
+  const thresholdApi=window.APP_CONFIG?.chatApiBase||(['localhost','127.0.0.1'].includes(location.hostname)?'http://127.0.0.1:8016':location.origin);
+  fetch(thresholdApi+'/api/review-threshold',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Unavailable');return r.json()}).then(data=>{
+    thresholdSlider.value=Math.round(data.threshold*100);
+    thresholdValue.textContent=thresholdSlider.value+'%';
+  }).catch(()=>{thresholdStatus.textContent='Could not load the current threshold.'});
+  thresholdSlider.addEventListener('input',()=>{thresholdValue.textContent=thresholdSlider.value+'%'});
+  thresholdSlider.addEventListener('change',async()=>{
+    thresholdSlider.disabled=true;
     try{
-      const response=await fetch(api+'/providers',{cache:'no-store'});
-      if(!response.ok)throw Error('Model information unavailable');
-      const data=await response.json();
-      const providers=data.providers.filter(p=>p.configured);
+      const response=await fetch(thresholdApi+'/api/review-threshold',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({threshold:Number(thresholdSlider.value)/100})});
+      if(!response.ok)throw Error('Could not save threshold');
+      const result=await response.json();
+      thresholdStatus.textContent='Saved: '+Math.round(result.threshold*100)+'%';
+    }catch(error){thresholdStatus.textContent=error.message}
+    finally{thresholdSlider.disabled=false}
+  });
+  let availableProviders=new Set();
+  async function load(){
+    select.disabled=true;
+    error.hidden=true;
+    try{
+      const [providersResponse,connectivityResponse]=await Promise.all([
+        fetch(api+'/providers',{cache:'no-store'}),
+        fetch(thresholdApi+'/api/chat/status',{cache:'no-store',signal:AbortSignal.timeout(15000)})
+      ]);
+      if(!providersResponse.ok||!connectivityResponse.ok)throw Error('Provider status unavailable');
+      const data=await providersResponse.json();
+      const connectivity=await connectivityResponse.json();
+      availableProviders=new Set(connectivity.providers.filter(p=>p.status==='connected').map(p=>p.id));
+      const usable=data.providers.filter(p=>p.configured&&availableProviders.has(p.id));
       const stored=localStorage.getItem(key);
-      const chosen=providers.some(p=>p.id===stored)?stored:(providers.some(p=>p.id===data.default_provider)?data.default_provider:providers[0]?.id);
+      const chosen=usable.some(p=>p.id===stored)?stored:
+        (usable.some(p=>p.id===data.default_provider)?data.default_provider:usable[0]?.id);
       select.replaceChildren();
-      for(const p of data.providers){
-        const option=document.createElement('option');option.value=p.id;
-        option.textContent=p.label+(p.configured?'':' (not configured)');option.disabled=!p.configured;
+      for(const provider of data.providers){
+        const online=provider.configured&&availableProviders.has(provider.id);
+        const option=document.createElement('option');
+        option.value=provider.id;
+        option.textContent=provider.label+(online?'':' (disconnected)');
+        option.disabled=!online;
         select.append(option);
       }
-      select.value=chosen||'';select.disabled=!chosen;
+      select.value=chosen||'';
+      select.disabled=!chosen;
       window.ShoplyTicketProvider=chosen||null;
-      const label=()=>data.providers.find(p=>p.id===select.value)?.label||select.value;
-      const update=()=>{current.textContent='Selected ticket classifier: '+(select.value?label():'None configured')+(select.value===data.default_provider?' (server default)':'');};
+      const update=()=>{
+        const provider=data.providers.find(p=>p.id===select.value);
+        current.textContent='Selected ticket classifier: '+(provider?.label||'No connected model');
+      };
       update();
-      select.addEventListener('change',()=>{
+      select.onchange=()=>{
+        if(!availableProviders.has(select.value))return;
         window.ShoplyTicketProvider=select.value;
         localStorage.setItem(key,select.value);
         update();
-      });
-    }catch(e){current.textContent='Current model could not be verified.';error.hidden=false;error.textContent=e.message;}
+      };
+      if(!chosen){error.hidden=false;error.textContent='No classification model is connected.';}
+    }catch(e){
+      select.disabled=true;window.ShoplyTicketProvider=null;
+      current.textContent='Model connectivity could not be verified.';
+      error.hidden=false;error.textContent=e.message;
+    }
   }
   async function loadChat(){
     const picker=document.getElementById('staff-chat-model-select');
@@ -117,6 +150,7 @@
         state.append(dot,stateLabel);row.append(avatar,identity,state);statusList.append(row);
       }
       summary.textContent=connected+' of '+data.providers.length+' models connected';
+      await load();
       checked.textContent='Last checked '+new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     }catch(e){summary.textContent='Unable to check connections';checked.textContent='The status service could not be reached. Try refreshing.';}
     finally{statusBusy=false;refreshButton.disabled=false;refreshButton.classList.remove('is-checking');}
