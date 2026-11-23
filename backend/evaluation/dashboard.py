@@ -310,8 +310,8 @@ def render_sidebar():
         if engine != BASELINE:
             st.info(f"Modell für neue Tests: {active_models[engine]}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
-                    key="batch_evaluation", disabled=engine in {BASELINE, "local"})
-        if engine not in {BASELINE, "local"} and st.session_state.get("batch_evaluation", True):
+                    key="batch_evaluation", disabled=engine == BASELINE)
+        if engine != BASELINE and st.session_state.get("batch_evaluation", True):
             st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
         supported = provider in PROVIDERS
         prompt_missing = (missing_prompt_message(provider) if supported else
@@ -332,11 +332,11 @@ def render_sidebar():
                         request_status.caption(f"{state['requests']} HTTP-Anfragen · {state['retries']} Wiederholungen · {state['batches']} geplante Batches · {state['errors']} fehlgeschlagene Tickets · {state.get('metadata_requests', 0)} Metadaten-Anfragen")
                         limit_status.caption(f"Limits: {state.get('limits_source', 'configured')}. Kontingentinformationen nur soweit der Provider sie liefert.")
                         st.session_state["last_batch_progress"] = dict(state, provider=provider, mode=mode)
-                    measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local",
+                    measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True),
                         tickets=tickets, provider=provider,
                     )
                     save_results(
-                        measured, results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local"),
+                        measured, results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)),
                     )
             except (RuntimeError, FileNotFoundError, ValueError) as exc:
                 st.error(str(exc))
@@ -353,7 +353,7 @@ def render_sidebar():
         st.divider()
         st.caption("Ergebnisdatei")
         if supported:
-            st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local").name, language=None)
+            st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)).name, language=None)
         return provider, mode, prompt_missing
 
 
@@ -579,7 +579,7 @@ def version_metrics(version, mode=None):
     provider = version["provider"]
     if provider not in PROVIDERS or missing_prompt_message(provider):
         return None
-    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local")
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
     if not path.is_file():
         return None
     results = load_results(path)
@@ -1106,7 +1106,7 @@ def main():
         render_version_comparison(mode)
         return
 
-    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local")
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(

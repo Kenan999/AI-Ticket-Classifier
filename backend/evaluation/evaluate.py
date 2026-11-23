@@ -324,8 +324,11 @@ def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
     if not math.isfinite(interval) or not 0 <= interval <= 600:
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None
-    if batch and provider != BASELINE and PROVIDERS[provider].get("provider") != LOCAL:
-        from backend.evaluation.batching import run
+    if batch and provider != BASELINE:
+        if PROVIDERS[provider].get("provider") == LOCAL:
+            from backend.evaluation.local_batch import run
+        else:
+            from backend.evaluation.batching import run
         batched = iter(run(tickets, PROVIDERS[provider], env, sleep, progress=progress))
     results = []
     for ticket in tickets:

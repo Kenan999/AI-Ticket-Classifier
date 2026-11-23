@@ -120,16 +120,11 @@ def run_duration(rows):
 
 
 def is_loop(rows):
-    if len(rows) > 1:
-        return True
-    for row in rows:
-        try:
-            request = json.loads(row["request_json"])
-            if isinstance(request, dict) and request.get("_observation", {}).get("run_kind") == "loop":
-                return True
-        except (ValueError, TypeError, AttributeError):
-            pass
-    return False
+    """A loop means multiple actual model requests in one recorded run.
+
+    Multiple tickets inside one HTTP batch do not constitute a loop.
+    """
+    return len(rows) > 1
 
 
 @contextmanager
