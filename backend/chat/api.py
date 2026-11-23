@@ -1,7 +1,7 @@
-"""Local-only Shoply chat order API and static frontend server.
+"""Local Shoply customer chat API and static frontend server.
 
 Run: python3 -m backend.chat.api --port 8016
-Uses the existing results/live_chat.sqlite; never creates or modifies orders.
+Uses the existing results/live_chat.sqlite.
 """
 import argparse
 import sys
@@ -18,7 +18,7 @@ ACTIVE = ('active', 'processing', 'shipped')
 sys.path.insert(0, str(ROOT))
 from backend.chat.service import reply as chat_reply
 from backend.chat import live_support, provider as chat_provider
-from backend.chat.invoices.pdf import invoice_for_customer, make_pdf
+from backend.review_threshold import get_threshold, set_threshold
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -44,7 +44,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_POST(self):
         path=urlsplit(self.path).path
-        if path not in ('/api/chat/reply','/api/support/request','/api/support/accept','/api/support/message','/api/support/close','/api/support/reset-demo','/api/chat/provider'):
+        if path not in ('/api/chat/reply','/api/support/request','/api/support/accept','/api/support/message','/api/support/close','/api/support/reset-demo','/api/chat/provider','/api/chat/tickets','/api/chat/tickets/status','/api/chat/tickets/dismiss','/api/review-threshold'):
             self.send_error(404);return
         try:
             size=int(self.headers.get('Content-Length','0'))
@@ -53,7 +53,11 @@ class Handler(SimpleHTTPRequestHandler):
             if not isinstance(data,dict):raise ValueError('Invalid request')
             if path=='/api/chat/reply':result=chat_reply(data.get('session_id'),data.get('message'),data.get('order_number'))
             elif path=='/api/chat/provider':result=chat_provider.set_provider(data.get('provider'))
-            elif path=='/api/support/request':result=live_support.create(data.get('history'))
+            elif path=='/api/review-threshold':result={'threshold':set_threshold(data.get('threshold'))}
+            elif path=='/api/chat/tickets':result=live_support.start_chat_ticket(data.get('message'))
+            elif path=='/api/chat/tickets/status':result=live_support.update_chat_ticket(data.get('id'),data.get('status'),data.get('category'),data.get('confidence'))
+            elif path=='/api/chat/tickets/dismiss':result=live_support.dismiss_chat_ticket(data.get('id'))
+            elif path=='/api/support/request':result=live_support.create(data.get('history'),data.get('ticket_id'))
             elif path=='/api/support/accept':result=live_support.accept(data.get('id'))
             elif path=='/api/support/message':
                 sender=data.get('sender')
@@ -77,6 +81,10 @@ class Handler(SimpleHTTPRequestHandler):
             config=__import__('backend.chat.service',fromlist=['settings']).settings()
             import os
             return self.json_response(200,{'provider':chat_provider.get(),'providers':[{'id':'gemini','configured':bool(os.getenv('GEMINI_API_KEY') or config.get('GEMINI_API_KEY'))},{'id':'openai','configured':bool(os.getenv('OPENAI_API_KEY') or config.get('OPENAI_API_KEY'))},{'id':'local','configured':__import__('socket').socket().connect_ex(('127.0.0.1',18642))==0}]})
+        if parsed.path=='/api/review-threshold':
+            return self.json_response(200,{'threshold':get_threshold()})
+        if parsed.path=='/api/chat/tickets':
+            return self.json_response(200,live_support.chat_tickets())
         if parsed.path=='/api/support/queue':
             return self.json_response(200,live_support.queue())
         if parsed.path=='/api/support/session':
@@ -84,51 +92,7 @@ class Handler(SimpleHTTPRequestHandler):
             try:
                 return self.json_response(200,live_support.read(args.get('id',[''])[0],args.get('customer_token',[None])[0],args.get('staff',['0'])[0]=='1'))
             except LookupError:return self.json_response(404,{'error':'Chat not found'})
-        if parsed.path == '/api/chat/invoice.pdf':
-            number=parse_qs(parsed.query).get('invoice', [''])[0]
-            record=invoice_for_customer(number)
-            if not record:
-                self.send_error(404, 'Invoice not found')
-                return
-            body=make_pdf(record)
-            self.send_response(200)
-            self.send_header('Content-Type','application/pdf')
-            self.send_header('Content-Disposition', ('attachment' if parse_qs(parsed.query).get('download') == ['1'] else 'inline') + '; filename="'+number+'.pdf"')
-            self.send_header('Access-Control-Allow-Origin','http://127.0.0.1:8015')
-            self.send_header('Content-Length',str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-        if urlsplit(self.path).path != '/api/chat/me/orders':
-            return super().do_GET()
-        try:
-            with sqlite3.connect(f'file:{DB}?mode=ro', uri=True) as db:
-                db.row_factory = sqlite3.Row
-                user = db.execute('SELECT id, name FROM users WHERE email=?', ('example.user@example.com',)).fetchone()
-                if user is None:
-                    raise LookupError('Demo user is not configured')
-                rows = db.execute('''
-                    SELECT o.id, o.order_number, o.item_name, o.status,
-                           p.id AS product_id, p.name AS product_name, p.image_url
-                    FROM orders o LEFT JOIN products p ON p.name = o.item_name COLLATE NOCASE
-                    WHERE o.user_id=? AND o.status IN (?,?,?)
-                    ORDER BY o.id
-                ''', (user['id'], *ACTIVE)).fetchall()
-                if any(row['product_id'] is None for row in rows):
-                    raise LookupError('An order has no matching product record')
-                orders = [dict(row) for row in rows]
-                response = {'user': dict(user), 'orders': orders}
-            body = json.dumps(response, ensure_ascii=False).encode('utf-8')
-            self.send_response(200)
-        except (sqlite3.Error, LookupError) as exc:
-            body = json.dumps({'error': str(exc)}).encode('utf-8')
-            self.send_response(500)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', 'http://127.0.0.1:8015')
-        self.send_header('Cache-Control', 'no-store')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        return super().do_GET()
 
 
 if __name__ == '__main__':
