@@ -1,0 +1,431 @@
+/* Interactive choice components */
+.demo-launch{font-size:13px;border:1px solid #dedede;border-radius:10px;padding:7px 10px;margin-left:4px}
+.demo-panel{width:100%;white-space:normal;line-height:1.5;font-size:14px;border:1px solid #e5e5e5;border-radius:18px;padding:18px;display:grid;gap:18px}
+.demo-section{display:grid;gap:9px}
+.demo-section h3{font-size:14px;font-weight:650;margin:0}
+.demo-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.demo-btn,.demo-select,.demo-date,.demo-input{border:1px solid #d6d6d6;border-radius:10px;padding:8px 12px;background:transparent;color:inherit;font:inherit}
+.demo-btn.active,.demo-segment button.active{background:#171717;color:white;border-color:#171717}
+.demo-check{display:flex;align-items:center;gap:7px}
+.demo-check input{accent-color:#0b73d9}
+.demo-segment{display:inline-flex;border:1px solid #ddd;border-radius:11px;padding:3px;gap:2px;max-width:100%}
+.demo-segment button{padding:7px 10px;border-radius:8px;font-size:13px}
+.demo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,150px));gap:10px}
+.demo-photo{position:relative;border:2px solid transparent;border-radius:12px;padding:4px;text-align:left;display:flex;flex-direction:column;gap:5px;min-width:0}
+.demo-photo[aria-pressed=true]{border-color:#147dca}
+.demo-photo img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;background:#eee}
+.demo-photo .chosen{position:absolute;top:9px;right:9px;background:#147dca;color:white;border-radius:50%;width:24px;height:24px;text-align:center;line-height:24px}
+.demo-photo span:last-child{font-size:13px;text-align:center}
+.demo-status{color:#666;font-size:13px;margin:0}
+.demo-notice{border-top:1px solid #eee;padding-top:12px;font-weight:600}
+body.dark .demo-panel{border-color:#484848}body.dark .demo-btn,body.dark .demo-input,body.dark .demo-select,body.dark .demo-date,body.dark .demo-segment,body.dark .demo-launch{border-color:#555;background:#303030;color:#eee}
+body.dark .demo-btn.active,body.dark .demo-segment button.active{background:#f4f4f4;color:#222}
+body.dark .demo-status{color:#bbb}body.dark .demo-notice{border-color:#484848}
+@media(max-width:450px){.demo-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.demo-panel{padding:12px}}
+
+.demo-support-choices{display:flex;flex-wrap:wrap;gap:8px}.demo-support-choices .demo-btn{max-width:100%;text-align:left}
+
+/* Customer-service choices: compact ChatGPT-style pill rows */
+.demo-support-choices{display:grid;grid-template-columns:minmax(0,1fr);gap:7px;width:min(100%,380px)}
+.demo-support-choices .demo-btn{width:100%;min-height:29px;padding:5px 14px;border:1px solid #dcdcdc;border-radius:999px;background:transparent;color:inherit;font-size:12px;line-height:1.4;font-weight:400;text-align:center;transition:background .15s,border-color .15s}
+.demo-support-choices .demo-btn:hover{background:#f1f1f1;border-color:#bbb}
+.demo-support-choices .demo-btn.active{background:#e7f2ff;color:#175f9c;border-color:#438bcd;font-weight:600}
+body.dark .demo-support-choices .demo-btn{background:transparent;color:#ededed;border-color:#424242}
+body.dark .demo-support-choices .demo-btn:hover{background:#333;border-color:#666}
+body.dark .demo-support-choices .demo-btn.active{background:#2e4459;color:#d6eaff;border-color:#6ca6d7}
+
+/* Two choices side by side, each with icon and direction/status mark */
+.demo-support-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;width:100%;max-width:700px}
+.demo-support-choices .demo-btn{display:flex;justify-content:center;align-items:center;gap:7px;min-width:0;min-height:42px;white-space:normal;padding:8px 10px;text-align:center}
+.demo-support-choices .demo-btn svg{flex:0 0 16px}
+.demo-support-choices .demo-btn span:not(.support-arrow){min-width:0}
+.demo-support-choices .demo-btn .support-arrow{font-size:16px;line-height:1;flex:0 0 auto}
+@media(max-width:480px){.demo-support-choices{gap:6px}.demo-support-choices .demo-btn{font-size:11px;padding:7px 5px;gap:4px}.demo-support-choices .demo-btn svg{width:14px;height:14px;flex-basis:14px}}
+
+/* Simulated live-agent handoff */
+.demo-live-connection:empty{display:none}
+.demo-live-connection{display:grid;gap:12px;max-width:540px}
+.demo-connection-wait,.demo-agent-row{display:flex;align-items:center;gap:12px}
+.demo-connection-wait{padding:14px;border-radius:14px;background:#f5f5f5}
+.demo-connection-lines,.demo-agent-info{display:grid;gap:3px;font-size:13px}
+.demo-connection-lines span,.demo-agent-info span{color:#777;font-size:12px}
+.demo-spinner{display:block;flex:0 0 23px;width:23px;height:23px;border:3px solid #ccc;border-top-color:#1777bb;border-radius:50%;animation:demo-spin .8s linear infinite}
+@keyframes demo-spin{to{transform:rotate(360deg)}}
+.demo-connection-joined{font-size:12px;color:#20834a;text-align:center}
+.demo-agent-avatar{height:44px;width:44px;object-fit:cover;border-radius:50%;background:#dce8ef;flex:0 0 44px}
+.demo-agent-typing,.demo-agent-bubble{margin-left:56px;max-width:410px;background:#f1f1f1;border-radius:4px 15px 15px 15px;padding:10px 13px;font-size:13px;line-height:1.5}
+.demo-agent-typing{color:#666}
+.demo-typing-dots{display:inline-block;letter-spacing:3px;animation:demo-pulse .9s ease-in-out infinite}
+@keyframes demo-pulse{50%{opacity:.25}}
+body.dark .demo-connection-wait,body.dark .demo-agent-typing,body.dark .demo-agent-bubble{background:#333}
+body.dark .demo-connection-lines span,body.dark .demo-agent-info span,body.dark .demo-agent-typing{color:#bbb}
+body.dark .demo-connection-joined{color:#83d9a0}
+@media(prefers-reduced-motion:reduce){.demo-spinner,.demo-typing-dots{animation:none}}
+
+/* Context-aware AI / human support feedback */
+.demo-feedback-panel:empty{display:none}
+.demo-feedback-form{display:grid;gap:10px;border:1px solid #ddd;border-radius:16px;padding:16px;max-width:540px}
+.demo-feedback-form h3{margin:0;font-size:15px}
+.demo-rating-stars{display:flex;gap:4px}
+.demo-rating-stars .demo-star{font-size:29px;line-height:1.25;padding:3px 5px;color:#aaa;border-radius:7px}
+.demo-rating-stars .demo-star.selected{color:#e4a21b}
+.demo-rating-stars .demo-star:hover{background:#eee}
+.demo-feedback-choices{display:flex;gap:8px;flex-wrap:wrap}
+.demo-feedback-choices .demo-btn{border-radius:999px;min-width:65px}
+.demo-feedback-note{font:inherit;color:inherit;background:transparent;resize:vertical;width:100%;border:1px solid #ddd;border-radius:10px;padding:10px;min-height:80px}
+.demo-feedback-submit{justify-self:start;background:#222;color:#fff;border-color:#222}
+.demo-finish-chat{justify-self:start;margin-left:56px}
+.demo-feedback-thanks{font-size:13px;color:#20834a;margin:0}
+body.dark .demo-feedback-form,body.dark .demo-feedback-note{border-color:#555}
+body.dark .demo-feedback-submit{background:#f4f4f4;color:#222}
+body.dark .demo-feedback-thanks{color:#83d9a0}
+body.dark .demo-rating-stars .demo-star:hover{background:#424242}
+
+/* Scenario navigation alongside the selection demo */
+.tools{flex-wrap:wrap}
+.scenario-launch.active{background:#e7f2ff;border-color:#438bcd;color:#175f9c}
+.scenario-placeholder{border:1px solid #e5e5e5;border-radius:16px;padding:16px;max-width:540px;white-space:normal}
+.scenario-placeholder p{font-size:13px;color:#666;margin:8px 0 0}
+body.dark .scenario-launch.active{background:#2e4459;border-color:#6ca6d7;color:#d6eaff}
+body.dark .scenario-placeholder{border-color:#484848}
+body.dark .scenario-placeholder p{color:#bbb}
+
+/* Identify every AI-generated assistant message, including scenario greetings. */
+.message.assistant::before{
+  content:"🤖  AI Assistant";
+  display:block;
+  width:fit-content;
+  margin:0 0 9px;
+  font-size:12px;
+  font-weight:650;
+  line-height:1.8;
+  letter-spacing:.1px;
+  color:#63676f;
+  white-space:nowrap;
+}
+body.dark .message.assistant::before{color:#c6c6c6}
+
+/* Smooth word-by-word reveal for AI text (local implementation). */
+.ai-reveal-word{display:inline;animation:ai-word-arrive .26s ease-out both}
+@keyframes ai-word-arrive{from{opacity:.05;filter:blur(2px)}to{opacity:1;filter:blur(0)}}
+@media(prefers-reduced-motion:reduce){.ai-reveal-word{animation:none}}
+
+/* Scenario 1: two photo orders plus another-issue selection */
+.scenario-order-choices{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;width:100%;max-width:660px;margin-top:18px;white-space:normal}
+.scenario-order-card{position:relative;display:flex;flex-direction:column;gap:8px;align-items:center;justify-content:flex-start;padding:7px;border:2px solid #e1e1e1;border-radius:14px;min-width:0;text-align:center;background:transparent;color:inherit;cursor:pointer;transition:border-color .15s,background .15s,transform .15s}
+.scenario-order-card:hover{background:#f5f5f5;transform:translateY(-1px)}
+.scenario-order-card[aria-pressed=true]{border-color:#1681d4;background:#edf6ff}
+.scenario-order-card img,.scenario-other-icon{display:block;width:100%;aspect-ratio:5/4;object-fit:cover;border-radius:9px;background:#f0f0f0}
+.scenario-other-icon{display:grid;place-items:center;font-size:38px}
+.scenario-order-name{font-size:13px;font-weight:550;line-height:1.35;padding:0 3px 5px}
+.scenario-order-check{position:absolute;top:12px;right:12px;display:none;border-radius:50%;background:#1681d4;color:#fff;width:23px;height:23px;line-height:23px;font-size:15px;text-align:center}
+.scenario-order-card[aria-pressed=true] .scenario-order-check{display:block}
+.scenario-order-selection{min-height:18px;font-size:13px;color:#666;margin:6px 0 0}
+body.dark .scenario-order-card{border-color:#474747}
+body.dark .scenario-order-card:hover{background:#303030}
+body.dark .scenario-order-card[aria-pressed=true]{border-color:#74b8f4;background:#293f53}
+body.dark .scenario-other-icon{background:#353535}
+body.dark .scenario-order-selection{color:#bbb}
+@media(max-width:560px){.scenario-order-choices{gap:7px}.scenario-order-card{padding:4px}.scenario-order-name{font-size:11px}.scenario-other-icon{font-size:27px}}
+
+/* Continue is revealed only after choosing an order or another issue. */
+.scenario-next-button{justify-self:start;display:inline-flex;align-items:center;justify-content:center;width:fit-content;margin-top:10px;padding:9px 18px;border-radius:999px;background:#202123;color:#fff;font-weight:600;font-size:13px;transition:opacity .2s,transform .2s}
+.scenario-next-button[hidden]{display:none!important}
+.scenario-next-button:not([hidden]){animation:scenario-next-arrive .2s ease-out both}
+.scenario-next-button:hover{opacity:.88}
+body.dark .scenario-next-button{background:#f4f4f4;color:#222}
+@keyframes scenario-next-arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.scenario-next-button:not([hidden]){animation:none}}
+
+/* Confirmed order choices remain visible and cannot be modified. */
+.scenario-order-confirmed{grid-template-columns:repeat(2,minmax(0,210px));max-width:440px}
+.scenario-order-confirmed:has(.scenario-order-card:only-child){grid-template-columns:minmax(0,210px)}
+.scenario-order-confirmed .scenario-order-card:disabled{cursor:default;opacity:1;transform:none}
+.scenario-order-confirmed .scenario-order-card:disabled:hover{transform:none}
+@media(max-width:560px){.scenario-order-confirmed{grid-template-columns:repeat(2,minmax(0,1fr))}.scenario-order-confirmed:has(.scenario-order-card:only-child){grid-template-columns:minmax(0,180px)}}
+
+.scenario-order-hint{font-size:12px;color:#666;margin:10px 0 -8px}
+body.dark .scenario-order-hint{color:#bbb}
+
+.scenario-order-confirmed:has(.scenario-order-card:nth-child(3)){grid-template-columns:repeat(3,minmax(0,1fr));max-width:660px}
+
+/* First concern in a multi-selection conversation. */
+.scenario-current-concern{display:grid;gap:8px;margin-top:13px;max-width:260px;font-size:13px}
+.scenario-current-concern[hidden]{display:none}
+.scenario-focus-card{display:flex;align-items:center;gap:11px;padding:9px 12px;border:1px solid #d7d7d7;border-radius:12px;background:#fafafa;font-weight:550}
+.scenario-focus-card img,.scenario-focus-icon{height:55px;width:65px;object-fit:cover;border-radius:8px;flex-shrink:0}
+.scenario-focus-icon{display:grid;place-items:center;background:#e9edf2;font-size:26px}
+body.dark .scenario-focus-card{background:#303030;border-color:#505050}
+body.dark .scenario-focus-icon{background:#414141}
+
+/* Single selected concern: no numbered heading; explanation below the card. */
+.scenario-order-detail{margin:3px 0 0;font-size:14px;line-height:1.5;font-weight:400}
+
+/* Persistent, visible customer support shortcuts directly above the chat input. */
+.scenario-quick-support{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;padding:0 3px}
+.scenario-quick-support[hidden],.scenario-quick-option[hidden]{display:none!important}
+.scenario-quick-option{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;min-height:38px;border:1px solid #dedede;border-radius:999px;background:#f9f9f9;color:inherit;font-size:12px;line-height:1.35;transition:background .15s,border-color .15s}
+.scenario-quick-option:hover{background:#eeeeee;border-color:#aaa}
+.scenario-support-result{display:grid;gap:12px;max-width:540px;font-size:14px}
+.scenario-quick-wait,.scenario-quick-agent{display:flex;align-items:center;gap:12px;padding:10px 0}
+.scenario-quick-agent img{height:44px;width:44px;border-radius:50%;object-fit:cover}
+.scenario-quick-agent div{display:grid;gap:3px}
+.scenario-quick-agent small{font-size:12px;color:#666}
+body.dark .scenario-quick-option{background:#303030;border-color:#4b4b4b}
+body.dark .scenario-quick-option:hover{background:#414141}
+body.dark .scenario-quick-agent small{color:#aaa}
+@media(max-width:550px){.scenario-quick-option{flex:1 1 170px;padding:8px;font-size:11px}}
+
+/* Keep the two product photos fully visible in every selection view. */
+.demo-photo img,.scenario-order-card img,.scenario-focus-card img{object-fit:contain;background:#fff}
+
+/* One answer-level feedback group shared by both order scenarios. */
+.scenario-solution-feedback{display:grid;gap:9px;margin-top:18px;white-space:normal}
+.scenario-solution-prompt{margin:0;font-size:13px;line-height:1.4;color:#666}
+.scenario-solution-options{display:flex;flex-wrap:wrap;gap:8px}
+.scenario-solution-options .scenario-quick-option{font-family:inherit}
+.scenario-solution-options .scenario-quick-option:disabled{cursor:default;opacity:.5}
+.scenario-solution-options .scenario-quick-option.selected{opacity:1;border-color:#aaa}
+body.dark .scenario-solution-prompt{color:#bbb}
+body.dark .scenario-solution-options .scenario-quick-option.selected{border-color:#888}
+
+
+/* Concern lifecycle: selected order, per-concern completion, and explicit chat closure. */
+.scenario-concern-position{margin:0;color:#666;font-size:12px;line-height:1.4}
+.scenario-order-card.scenario-order-current{box-shadow:0 0 0 2px #1681d433}
+.scenario-order-card.scenario-order-completed{border-color:#75a987;background:#f0f8f2}
+.scenario-concern-badge{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:3px 9px;background:#dcefe1;color:#22613a;font-size:11px;line-height:1.3}
+.scenario-quick-option:disabled{cursor:default;opacity:.5}
+.scenario-conversation-closed{display:grid;gap:11px;white-space:normal}
+.scenario-conversation-closed>strong{font-size:17px}
+.scenario-conversation-closed>p{margin:0;font-size:14px;line-height:1.5}
+.scenario-conversation-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:3px}
+.composer-wrap[data-conversation-state="closed"] .composer{opacity:.65}
+.composer-wrap[data-conversation-state="closed"] textarea{cursor:default}
+body.dark .scenario-concern-position{color:#bbb}
+body.dark .scenario-order-card.scenario-order-completed{border-color:#6caa83;background:#24392c}
+body.dark .scenario-concern-badge{background:#335940;color:#c0edcc}
+body.dark .scenario-order-card.scenario-order-current{box-shadow:0 0 0 2px #74b8f433}
+
+/* Compact single-row composer actions inside the embedded dashboard. */
+.composer .tools {
+  display:flex;
+  flex-wrap:nowrap;
+  align-items:center;
+  gap:clamp(2px, .5vw, 6px);
+  min-width:0;
+  width:100%;
+}
+.composer .tools > .circle { flex:0 0 30px; width:30px; height:30px; font-size:20px; }
+.composer .tools > .demo-launch {
+  flex:0 1 auto;
+  min-width:0;
+  margin-left:0;
+  padding:5px clamp(3px, .6vw, 8px);
+  font-size:clamp(9px, 1vw, 12px);
+  white-space:nowrap;
+}
+.composer .tools > .send { margin-left:auto; flex-shrink:0; }
+
+/* Dashboard-width composer: fixed one-line toolbar without sideways scrolling. */
+.composer .tools {
+  display:grid;
+  grid-template-columns: 28px minmax(0, .7fr) minmax(0, 1fr) minmax(0, 1fr) 28px;
+  align-items:center;
+  gap:4px;
+  width:100%;
+  min-width:0;
+  overflow:hidden;
+}
+.composer .tools > .circle { width:28px; height:28px; min-width:0; padding:0; }
+.composer .tools > .demo-launch {
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  padding:4px 2px;
+  margin:0;
+  font-size:10px;
+  line-height:1.15;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  text-align:center;
+}
+.composer .tools > .send { margin:0; }
+
+/* IHK customer-dashboard theme: retain chat structure, match white/green palette. */
+:root { color-scheme:light; background:#fff; color:#24312c; }
+html, body, body.dark { background:#fff; color:#24312c; color-scheme:light; }
+body.dark .composer { background:#fff; border:1px solid #dde5e1; box-shadow:0 2px 12px #24312c0b; }
+body.dark textarea, body.dark .message, body.dark .welcome { color:#24312c; }
+body.dark textarea::placeholder { color:#5f6b66; }
+body.dark .message.user { background:#e8f5ee; color:#24312c; }
+body.dark .thinking, body.dark .message.assistant::before { color:#5f6b66; }
+body.dark button.circle:hover, body.dark .menu button:hover { background:#e8f5ee; }
+body.dark .send { background:#047857!important; color:#fff!important; }
+body.dark .send:disabled { background:#dde5e1!important; color:#7d8d85!important; }
+body.dark .menu { background:#fff; border-color:#dde5e1; color:#24312c; }
+body.dark .demo-btn, body.dark .demo-input, body.dark .demo-select,
+body.dark .demo-date, body.dark .demo-segment, body.dark .demo-launch {
+  background:#fff; color:#24312c; border-color:#dde5e1;
+}
+body.dark .demo-btn.active, body.dark .demo-segment button.active,
+body.dark .scenario-launch.active, body.dark .demo-support-choices .demo-btn.active {
+  background:#e8f5ee; color:#047857; border-color:#047857;
+}
+body.dark .demo-support-choices .demo-btn { background:#fff; color:#24312c; border-color:#dde5e1; }
+body.dark .demo-support-choices .demo-btn:hover { background:#f6f8f7; border-color:#047857; }
+body.dark .demo-panel, body.dark .demo-notice, body.dark .scenario-placeholder,
+body.dark .demo-feedback-form, body.dark .demo-feedback-note { border-color:#dde5e1; }
+body.dark .demo-connection-wait, body.dark .demo-agent-typing,
+body.dark .demo-agent-bubble { background:#f6f8f7; color:#24312c; }
+body.dark .demo-status, body.dark .scenario-placeholder p,
+body.dark .demo-connection-lines span, body.dark .demo-agent-info span { color:#5f6b66; }
+body.dark .demo-feedback-submit { background:#047857; color:#fff; }
+body.dark .scenario-order-card { border-color:#dde5e1; }
+
+/* Classifier embed: readable scenario labels in the composer toolbar. */
+body.dark .composer .tools > button.demo-launch {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:36px;
+  height:auto;
+  padding:5px 4px;
+  background:#f0f7f3;
+  border:1px solid #a7c8b6;
+  border-radius:9px;
+  color:#174b35;
+  font-size:11px;
+  font-weight:600;
+  line-height:1.2;
+  white-space:normal;
+  overflow-wrap:normal;
+  word-break:normal;
+  text-align:center;
+}
+body.dark .composer .tools > button.demo-launch.active {
+  background:#d9efe2;
+  border-color:#047857;
+  color:#075b40;
+}
+.composer .tools {
+  grid-template-columns:28px minmax(0,.9fr) minmax(0,1.15fr) minmax(0,1.15fr) 28px;
+  overflow:visible;
+}
+
+/* Customer support actions ABOVE the input (not the composer toolbar). */
+body.dark .scenario-quick-support .scenario-quick-option {
+  background:#f0f7f3;
+  border:1px solid #a7c8b6;
+  color:#174b35;
+  font-size:13px;
+  font-weight:600;
+  line-height:1.35;
+  opacity:1;
+  white-space:normal;
+}
+body.dark .scenario-quick-support .scenario-quick-option:hover {
+  background:#e0f1e7;
+  border-color:#047857;
+  color:#075b40;
+}
+body.dark .scenario-quick-support .scenario-quick-option:focus-visible {
+  outline:2px solid #047857;
+  outline-offset:2px;
+}
+
+/* Unified light customer dashboard controls across every scenario stage. */
+body.dark .scenario-solution-options .scenario-quick-option,
+body.dark .scenario-conversation-actions .scenario-quick-option,
+body.dark .scenario-next-button,
+body.dark .scenario-order-card,
+body.dark .scenario-solution-options .scenario-quick-option.selected {
+  background:#f0f7f3;
+  border:1px solid #a7c8b6;
+  color:#174b35;
+  font-size:13px;
+  font-weight:600;
+  line-height:1.35;
+  opacity:1;
+}
+body.dark .scenario-solution-options .scenario-quick-option,
+body.dark .scenario-conversation-actions .scenario-quick-option {
+  min-height:40px;
+  padding:9px 13px;
+  white-space:normal;
+  overflow-wrap:break-word;
+}
+body.dark .scenario-solution-options .scenario-quick-option:hover:not(:disabled),
+body.dark .scenario-conversation-actions .scenario-quick-option:hover:not(:disabled),
+body.dark .scenario-next-button:hover,
+body.dark .scenario-order-card:hover {
+  background:#e0f1e7;
+  border-color:#047857;
+  color:#075b40;
+}
+body.dark .scenario-order-card[aria-pressed="true"],
+body.dark .scenario-solution-options .scenario-quick-option.selected {
+  background:#d9efe2;
+  border-color:#047857;
+  color:#075b40;
+}
+body.dark .scenario-solution-options .scenario-quick-option:disabled {
+  opacity:.55;
+}
+body.dark .scenario-solution-prompt,
+body.dark .scenario-order-detail,
+body.dark .scenario-order-selection,
+body.dark .scenario-concern-position,
+body.dark .scenario-order-hint { color:#405c4d; }
+body.dark .scenario-focus-card { background:#f6f8f7; border-color:#dde5e1; color:#24312c; }
+body.dark .scenario-focus-icon { background:#e8f5ee; }
+body.dark .demo-feedback-form,
+body.dark .demo-feedback-note { background:#fff; color:#24312c; border-color:#dde5e1; }
+body.dark .demo-feedback-submit { background:#047857; color:#fff; border-color:#047857; }
+body.dark .demo-feedback-thanks { color:#047857; }
+body.dark .demo-rating-stars .demo-star:hover { background:#e8f5ee; }
+body.dark .scenario-quick-option:focus-visible,
+body.dark .scenario-next-button:focus-visible,
+body.dark .scenario-order-card:focus-visible {
+  outline:2px solid #047857;
+  outline-offset:2px;
+}
+
+/* Every complete assistant response is presented in its own subtle dark card. */
+body.dark .messages > .message.assistant {
+  align-self:stretch;
+  width:100%;
+  padding:16px 18px 18px;
+  background:#292d2b;
+  color:#f3f5f4;
+  border:1px solid #3b403d;
+  border-radius:16px;
+  box-shadow:0 2px 8px rgba(0,0,0,.07);
+  white-space:pre-wrap;
+}
+body.dark .messages > .message.assistant::before { color:#cbd5cf; }
+body.dark .messages > .message.assistant .scenario-order-detail,
+body.dark .messages > .message.assistant .scenario-concern-position { color:#e2e8e4; }
+@media(max-width:600px){body.dark .messages > .message.assistant{padding:13px 14px;border-radius:13px}}
+
+.scenario-invoice-link{display:block;margin-top:12px;padding:12px 14px;border:1px solid #91b7a4;border-radius:12px;background:#eaf6ef;color:#145c3e!important;text-decoration:none;font-weight:600;white-space:normal}
+.scenario-invoice-link:hover{text-decoration:underline;background:#d9efe2}
+
+.scenario-invoice-card{margin-top:14px;padding:14px;border:1px solid #606b65;border-radius:12px;max-width:480px;white-space:normal}
+.scenario-invoice-card strong{display:block;font-size:14px}
+.scenario-invoice-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.scenario-invoice-actions .scenario-invoice-link{display:inline-flex;align-items:center;justify-content:center;position:relative;z-index:2;cursor:pointer;pointer-events:auto;margin:0;min-height:42px;padding:9px 13px;font-size:13px}
+
+/* Keep the send action at the far right of the composer on every viewport. */
+.composer .tools {
+  display:flex;
+  flex-wrap:nowrap;
+  direction:ltr;
+}
+.composer .tools > #plus { order:0; margin-right:auto; }
+.composer .tools > #send { order:99; margin-left:auto; margin-right:0; flex:0 0 28px; }
+
+/* Human replies must not be identified as AI-generated messages. */
+.message.assistant.human-agent::before{content:none!important;display:none!important}
+.human-agent-header{display:flex;align-items:center;gap:9px;margin-bottom:9px;font-size:13px;color:#047857}
+.human-agent-avatar{width:30px;height:30px;object-fit:cover;border-radius:50%;border:1px solid #b7d6c5;background:#eaf5ee;flex-shrink:0}
