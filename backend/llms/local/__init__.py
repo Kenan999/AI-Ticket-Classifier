@@ -4,20 +4,20 @@ import os
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 from backend.keyword_classifier import PredictionResult, CATEGORY_GUIDANCE
-from .prompts import render_prompt, DEFAULT_PROMPT_VERSION
-from .retry import LLMError
-from .gemini import configured_categories
+from ..prompts import render_prompt, DEFAULT_PROMPT_VERSION
+from ..retry import LLMError
+from ..gemini import configured_categories
 from backend.observation import store
 from pathlib import Path
 from uuid import uuid4
 
-DEFAULT_LOCAL_MODEL = 'mlx-community/Qwen3-4B-Instruct-2507-4bit'
-DEFAULT_LOCAL_ENDPOINT = 'http://127.0.0.1:18642/v1/chat/completions'
+from .config import configured_model, configured_endpoint, DEFAULT_LOCAL_ENDPOINT
+DEFAULT_LOCAL_MODEL = configured_model()
 
 
 def classify_with_local(text, *, categories, model=DEFAULT_LOCAL_MODEL, timeout=30, endpoint=None, observation_source="application", prompt_version=DEFAULT_PROMPT_VERSION, **_):
     categories = configured_categories(','.join(categories))
-    endpoint = endpoint or os.getenv('LOCAL_LLM_ENDPOINT', DEFAULT_LOCAL_ENDPOINT)
+    endpoint = endpoint or configured_endpoint()
     if not endpoint.startswith(('http://127.0.0.1:', 'http://localhost:')):
         raise LLMError('Local model endpoint must be loopback')
     instruction = render_prompt(prompt_version, "local", categories, category_guidance=CATEGORY_GUIDANCE)
@@ -29,7 +29,7 @@ def classify_with_local(text, *, categories, model=DEFAULT_LOCAL_MODEL, timeout=
     observation = None
     ident = uuid4().hex
     try:
-        config = json.loads((Path(__file__).resolve().parents[1] / 'observation' / 'config.json').read_text())
+        config = json.loads((Path(__file__).resolve().parents[2] / 'observation' / 'config.json').read_text())
         if config.get('recording', {}).get('enabled'):
             store.start(config, ident=ident, source=observation_source, provider='local', model=model,
                         request={'ticket': text}, run_id=None, created_at=store.timestamp())

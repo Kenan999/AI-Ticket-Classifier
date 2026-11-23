@@ -23,7 +23,7 @@ def observation_config(models=None):
         import sys
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
-        from backend.llms.config import model_configuration
+        from backend.llms.registry import model_configuration
         models = model_configuration(test_environment())
     config["llms"] = [dict(item) for item in models["llms"]]
     return config
@@ -568,7 +568,7 @@ def render():
         st.info("Noch keine Anfragen gespeichert. Neue LLM-Anfragen erscheinen hier, wenn die Aufzeichnung aktiviert ist.")
         return
     # Only offer currently configured models. Historical observations remain intact.
-    from backend.llms.config import model_configuration
+    from backend.llms.registry import model_configuration
     from backend.evaluation.evaluate import load_env
     current_models = {(item["id"], item["model"])
                       for item in model_configuration(load_env())["llms"]}

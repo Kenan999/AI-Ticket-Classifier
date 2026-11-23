@@ -21,7 +21,7 @@ if __package__ in (None, ""):
 from backend.tickets import case_storage
 from backend.keyword_classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
 from backend.tickets.review import ReviewError, save_review
-from backend.llms.config import openai_api_key
+from backend.llms.openai.config import openai_api_key
 from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini

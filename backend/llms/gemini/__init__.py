@@ -11,14 +11,14 @@ from urllib.parse import quote
 from urllib.request import Request, urlopen
 
 from backend.keyword_classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
-from .retry import LLMError, read_provider_response
+from ..retry import LLMError, read_provider_response
 from backend.observation.tracing import observed_call
-from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from ..prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
-from .config import default_model
+from .config import configured_model
 
-DEFAULT_MODEL = default_model("gemini")
+DEFAULT_MODEL = configured_model()
 MAX_RESPONSE_BYTES = 32 * 1024
 
 

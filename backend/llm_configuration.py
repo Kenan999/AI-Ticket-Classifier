@@ -1,6 +1,6 @@
 """Central LLM selection in the native, collapsible Streamlit sidebar."""
 import streamlit as st
-from backend.llms.config import model_configuration
+from backend.llms.registry import model_configuration
 from backend.evaluation.evaluate import load_env
 
 models = model_configuration(load_env())["llms"]

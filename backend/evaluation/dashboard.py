@@ -95,7 +95,7 @@ VERSIONS = [
 ]
 
 def configured_versions():
-    from backend.llms.config import model_configuration
+    from backend.llms.registry import model_configuration
     from backend.evaluation.evaluate import load_env
     versions = [VERSIONS[0]]
     for item in model_configuration(load_env())["llms"]:
@@ -290,7 +290,7 @@ def render_sidebar():
         prompt_controls = st.container()
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         model_env = load_env()
-        from backend.llms.config import model_configuration
+        from backend.llms.registry import model_configuration
         active_models = {item["id"]: item["model"]
                          for item in model_configuration(model_env)["llms"]}
         engine = st.selectbox(

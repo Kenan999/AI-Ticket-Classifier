@@ -5,14 +5,14 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from backend.keyword_classifier import CATEGORY_GUIDANCE, PredictionResult
-from .gemini import configured_categories
-from .retry import LLMError, read_provider_response
+from ..gemini import configured_categories
+from ..retry import LLMError, read_provider_response
 from backend.observation.tracing import observed_call
-from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from ..prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
-from .config import default_model
+from .config import configured_model
 
-DEFAULT_OPENAI_MODEL = default_model("openai")
+DEFAULT_OPENAI_MODEL = configured_model()
 MAX_RESPONSE_BYTES = 32 * 1024
 
 

@@ -142,7 +142,7 @@ def load_env(path=ENV_PATH):
         if name in ENV_KEYS:
             values[name] = value.strip().strip('"\'')
     values.update({name: os.environ[name] for name in ENV_KEYS if name in os.environ})
-    from backend.llms.config import model_configuration
+    from backend.llms.registry import model_configuration
     for item in model_configuration(values)["llms"]:
         values[item["model_environment_variable"]] = item["model"]
     return values
