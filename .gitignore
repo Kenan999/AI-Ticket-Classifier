@@ -23,3 +23,7 @@ results/
 # Track data-processing source modules; runtime datasets remain ignored.
 !backend/data/
 !backend/data/*.py
+
+.venv-local-llm/
+
+.venv-local-embeddings/

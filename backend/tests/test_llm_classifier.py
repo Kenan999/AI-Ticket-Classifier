@@ -9,7 +9,7 @@ from unittest.mock import patch
 from urllib.error import URLError
 
 from backend.app import create_app
-from backend.classifier import CATEGORY_GUIDANCE, MODEL_VERSION
+from backend.tickets.categories import CATEGORY_GUIDANCE, MODEL_VERSION
 from backend.llms.gemini import (
     DEFAULT_CATEGORIES, LLMError, classify_with_gemini, configured_categories,
 )

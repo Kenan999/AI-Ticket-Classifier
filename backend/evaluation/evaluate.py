@@ -30,8 +30,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from backend import classifier as backend_classifier
-from backend.classifier import dataset_label_for, predict_ticket
+from backend.tickets.categories import dataset_label_for, CATEGORY_GUIDANCE
+from backend.evaluation.baseline import predict_ticket
 from backend.data.data_loader import load_dataset
 from backend.llms.gemini import (
     DEFAULT_MODEL,
@@ -77,11 +77,10 @@ SAMPLE_SEED = 42
 # Datei, damit ein Lauf nie das Ergebnis des anderen ueberschreibt.
 BASELINE = "baseline"
 GEMINI = "gemini"
+LOCAL = "local"
 PROVIDERS = {
-    BASELINE: {
-        "label": "Regeln (V0)",
-        "suffix": "v0",
-    },
+    BASELINE: {"label": "Regeln (V0)", "suffix": "v0"},
+    LOCAL: {"label": "Local Qwen3-4B", "suffix": "local", "provider": LOCAL, "prompt_version": DEFAULT_PROMPT_VERSION},
     GEMINI: {
         "label": "Gemini (Standard)",
         "suffix": "gemini",
@@ -96,7 +95,7 @@ PROVIDERS = {
             "prompt_version": version,
         }
         for version, prompts in PROMPTS.items()
-        for provider in prompts
+        for provider in PROVIDER_NAMES
     },
 }
 
@@ -140,6 +139,9 @@ def load_env(path=ENV_PATH):
         if name in ENV_KEYS:
             values[name] = value.strip().strip('"\'')
     values.update({name: os.environ[name] for name in ENV_KEYS if name in os.environ})
+    from backend.llms.registry import model_configuration
+    for item in model_configuration(values)["llms"]:
+        values[item["model_environment_variable"]] = item["model"]
     return values
 
 
@@ -157,7 +159,7 @@ def results_path(provider, mode, *, batch=False):
     Ergebnis eines anderen.
     """
     suffix = PROVIDERS[provider]["suffix"]
-    if batch and provider != BASELINE:
+    if batch:
         suffix += "_batch_v1"
     return RESULTS_DIR / f"{mode_number(mode):02d}_{mode}_{suffix}.csv"
 
@@ -258,11 +260,17 @@ def classify_ticket(text, provider=BASELINE, env=None):
     method = PROVIDERS[provider]
     if provider == BASELINE:
         prediction = predict_ticket(text)
-        return (prediction.category, prediction.confidence,
-                prediction.model_version, "")
+        return prediction.category, prediction.confidence, prediction.model_version, ""
 
     env = env if env is not None else load_env()
     name = method["provider"]
+    if name == "local":
+        from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
+        try:
+            prediction = classify_with_local(text, categories=configured_categories(env.get("LLM_CATEGORIES", "")), model=env.get("LOCAL_LLM_MODEL", DEFAULT_LOCAL_MODEL), timeout=float(env.get("LOCAL_LLM_TIMEOUT_SECONDS", "30")), observation_source="evaluation", prompt_version=method["prompt_version"])
+            return prediction.category, prediction.confidence, prediction.model_version, ""
+        except (LLMError, ValueError, OverflowError) as exc:
+            return "FEHLER", 0.0, "local:nicht erreichbar", type(exc).__name__
     if name == "openai":
         adapter, default_model = classify_with_openai, DEFAULT_OPENAI_MODEL
     else:
@@ -281,7 +289,7 @@ def classify_ticket(text, provider=BASELINE, env=None):
         if name == GEMINI:
             prompt_options["instructions"] = render_prompt(
                 prompt_version, name, categories,
-                category_guidance=backend_classifier.CATEGORY_GUIDANCE,
+                category_guidance=CATEGORY_GUIDANCE,
             )
         prediction = adapter(
             text,
@@ -305,15 +313,18 @@ def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
     Ground Truth ist das Label des Datensatzes, die Antwort des
     Klassifikators wird dafuer in ein Label uebersetzt.
     """
-    env = load_env() if provider != BASELINE else {}
+    env = {} if provider == BASELINE else load_env()
     prompt_version = PROVIDERS[provider].get("prompt_version", "")
     mapping = category_to_label()
-    interval = float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS)) if provider != BASELINE else 0
+    interval = 0 if provider == BASELINE else float(env.get("EVALUATION_REQUEST_INTERVAL_SECONDS", REQUEST_INTERVAL_SECONDS))
     if not math.isfinite(interval) or not 0 <= interval <= 600:
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None
     if batch and provider != BASELINE:
-        from backend.evaluation.batching import run
+        if PROVIDERS[provider].get("provider") == LOCAL:
+            from backend.evaluation.local_batch import run
+        else:
+            from backend.evaluation.batching import run
         batched = iter(run(tickets, PROVIDERS[provider], env, sleep, progress=progress))
     results = []
     for ticket in tickets:
@@ -485,7 +496,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--provider",
         choices=sorted(PROVIDERS),
-        default=BASELINE,
+        default="local",
         help="Regeln, Standard-Gemini oder ein versionierter Gemini-/OpenAI-Prompt",
     )
     parser.add_argument(

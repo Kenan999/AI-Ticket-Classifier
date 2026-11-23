@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 import tempfile
 
-from backend.llms.config import openai_api_key
+from backend.llms.openai.config import openai_api_key
 from backend.llms.gemini import configured_categories
 from backend.llms.openai import DEFAULT_OPENAI_MODEL
 

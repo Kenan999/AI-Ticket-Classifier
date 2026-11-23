@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
 
-from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES
+from backend.tickets.categories import CATEGORY_GUIDANCE, DATASET_CATEGORIES
 from backend.evaluation.dashboard import prompt_texts
 from backend.llms.prompts import CATEGORY_GUIDANCE_V2, render_prompt
 

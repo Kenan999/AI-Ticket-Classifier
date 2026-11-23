@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.scripts import check_openai_categories as smoke
-from backend.classifier import PredictionResult
+from backend.tickets.categories import PredictionResult
 from backend.llms.gemini import LLMError
 
 

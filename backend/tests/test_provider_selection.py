@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from backend.app import create_app
-from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+from backend.tickets.categories import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 from backend.llms.gemini import LLMError
 from backend.llms.prompts import GUIDANCE_BY_VERSION
 from backend.evaluation import evaluate

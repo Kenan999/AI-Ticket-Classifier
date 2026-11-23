@@ -10,12 +10,15 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from backend.classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
-from .retry import LLMError, read_provider_response
-from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from backend.tickets.categories import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+from ..retry import LLMError, read_provider_response
+from backend.observation.tracing import observed_call
+from ..prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
 DEFAULT_CATEGORIES = DATASET_CATEGORIES
-DEFAULT_MODEL = "gemini-3.5-flash-lite"
+from .config import configured_model
+
+DEFAULT_MODEL = configured_model()
 MAX_RESPONSE_BYTES = 32 * 1024
 
 
@@ -35,6 +38,7 @@ def configured_categories(raw=None):
     return DEFAULT_CATEGORIES
 
 
+@observed_call
 def classify_with_gemini(text, *, api_key, categories, model=DEFAULT_MODEL,
                          timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION,
                          instructions=None, retry_budget=None):

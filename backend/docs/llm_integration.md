@@ -102,7 +102,7 @@ Both providers load the selected system prompt from
 [`backend/llms/prompts.py`](../llms/prompts.py). Runtime classification
 uses V1. Evaluation can select V1, V2, or V3 for either provider. All versions
 receive the same canonical labels and category guidance from
-[`backend/classifier.py`](../classifier.py).
+[`backend/tickets/categories.py`](../tickets/categories.py).
 
 ## Acceptance tests
 
