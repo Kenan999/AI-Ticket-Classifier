@@ -4,7 +4,7 @@ import json
 
 
 DEFAULT_PROMPT_VERSION = "V1"
-PROVIDER_NAMES = {"gemini": "Gemini", "openai": "OpenAI"}
+PROVIDER_NAMES = {"gemini": "Gemini", "openai": "OpenAI", "local": "Local Qwen3-4B"}
 
 BASE_PROMPTS = {
     'gemini': (
@@ -72,10 +72,12 @@ PROMPT_V3 = (
 
 # V2 uses the V1 instructions with rewritten category descriptions.
 # V3 uses new instructions with the V2 descriptions.
+BASE_PROMPTS["local"] = BASE_PROMPTS["openai"]
+
 PROMPTS = {
     "V1": {**BASE_PROMPTS},
     "V2": {**BASE_PROMPTS},
-    "V3": {"gemini": PROMPT_V3, "openai": PROMPT_V3},
+    "V3": {"gemini": PROMPT_V3, "openai": PROMPT_V3, "local": PROMPT_V3},
 }
 
 # V1 uses the shared description in backend/keyword_classifier.py.

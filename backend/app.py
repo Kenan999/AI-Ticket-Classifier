@@ -22,11 +22,12 @@ from backend.tickets import case_storage
 from backend.keyword_classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
 from backend.tickets.review import ReviewError, save_review
 from backend.llms.config import openai_api_key
+from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
 
-PROVIDERS = ("baseline", "openai", "gemini")
+PROVIDERS = ("baseline", "openai", "gemini", "local")
 
 
 def default_provider():
@@ -89,6 +90,7 @@ def create_app(review_path=None, case_db_path=None):
             "providers": [
                 {"id": "baseline", "label": "Local rules", "configured": True},
                 {"id": "openai", "label": "OpenAI", "configured": bool(openai_api_key())},
+                {"id": "local", "label": "Local Qwen3-4B", "configured": True},
                 {"id": "gemini", "label": "Gemini",
                  "configured": bool(os.getenv("GEMINI_API_KEY", "").strip())},
             ],
@@ -114,12 +116,19 @@ def create_app(review_path=None, case_db_path=None):
         explicit_provider = "provider" in data
         provider = data.get("provider") if explicit_provider else default_provider()
         if not isinstance(provider, str) or provider not in PROVIDERS:
-            return error("invalid_provider", "provider must be baseline, openai or gemini")
+            return error("invalid_provider", "provider must be baseline, openai, gemini or local")
 
         # Only this request selects the provider; never mutate process settings.
         used_provider = "baseline"
         prediction = None
-        if provider != "baseline":
+        if provider == "local":
+            try:
+                prediction = classify_with_local(text, categories=configured_categories(), model=os.getenv("LOCAL_LLM_MODEL", DEFAULT_LOCAL_MODEL), timeout=float(os.getenv("LOCAL_LLM_TIMEOUT_SECONDS", "30")))
+                used_provider = "local"
+            except (LLMError, ValueError, OverflowError):
+                if explicit_provider:
+                    return error("provider_unavailable", "Local model could not classify the ticket", 502)
+        elif provider != "baseline":
             api_key = (openai_api_key() if provider == "openai"
                        else os.getenv("GEMINI_API_KEY", "").strip())
             if not api_key:

@@ -1,6 +1,7 @@
 """Standalone, read-only Streamlit observation dashboard."""
 import json
 import base64
+import html
 import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
@@ -73,26 +74,56 @@ def loop_marker(rows):
     return f"![{alt}](data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()})"
 
 
+def display_model(provider, model):
+    if provider == "local" and "Qwen3-4B" in str(model):
+        return "Qwen3-4B (4-bit)"
+    return str(model)
+
+
 def provider_logos(rows):
-    import base64
-    logos = []
+    """Model labels with the existing provider logos and a local Qwen icon."""
+    parts = []
     for provider, model in sorted({(row["provider"], row["model"]) for row in rows}):
         if provider not in {"openai", "gemini", "local"}:
             continue
-        path = Path(__file__).with_name("assets") / (("qwen" if provider == "local" else provider) + ".svg")
+        logo = "qwen" if provider == "local" else provider
+        path = Path(__file__).with_name("assets") / (logo + ".svg")
         if path.is_file():
-            encoded = base64.b64encode(path.read_bytes()).decode()
-            safe_model = str(model).replace("`", "")
-            logos.append(f"![{provider}](data:image/svg+xml;base64,{encoded}) `{safe_model}`")
-    return "　".join(logos)
+            data = base64.b64encode(path.read_bytes()).decode("ascii")
+            image = f'<img src="data:image/svg+xml;base64,{data}" alt="{html.escape(logo)}" style="width:22px;height:22px;object-fit:contain;flex:none">'
+        else:
+            image = ""
+        parts.append(f'<span style="display:inline-flex;align-items:center;gap:9px;min-width:0">{image}<span style="overflow-wrap:anywhere">{html.escape(display_model(provider, model))}</span></span>')
+    return "<span style='display:flex;flex-wrap:wrap;gap:12px'>" + "".join(parts) + "</span>"
+
+
+def provider_logos_markdown(rows):
+    """Streamlit expander labels require Markdown images, not raw HTML."""
+    parts = []
+    for provider, model in sorted({(row["provider"], row["model"]) for row in rows}):
+        logo = "qwen" if provider == "local" and "Qwen" in model else provider
+        path = Path(__file__).with_name("assets") / (logo + ".svg")
+        icon = ""
+        if path.is_file():
+            icon = f"![{logo}](data:image/svg+xml;base64,{base64.b64encode(path.read_bytes()).decode()}) "
+        parts.append(icon + f"`{display_model(provider, model).replace(chr(96), '')}`")
+    return " ".join(parts)
+
+
+def effective_cost(row):
+    if row["provider"] == "local" and "Qwen3-4B" in str(row["model"]):
+        return 0.0
+    return stored_metrics(row).get("estimated_standard_cost_usd")
 
 
 def run_cost(rows):
-    costs = [stored_metrics(row).get("estimated_standard_cost_usd") for row in rows]
+    costs = [effective_cost(row) for row in rows]
     known = [cost for cost in costs if isinstance(cost, (int, float)) and not isinstance(cost, bool)]
     if not known:
         return "Kosten: unbekannt"
     suffix = " (unvollständig)" if len(known) != len(costs) else ""
+    if all(row["provider"] == "local" and "Qwen3-4B" in str(row["model"]) for row in rows):
+        return "$0.00 API-Kosten"
     return f"≈ ${sum(known):.6f}{suffix}"
 
 
@@ -109,6 +140,7 @@ def run_duration(rows):
 
 
 def is_loop(rows):
+    """Identify actual request loops, not tickets inside one batch."""
     return group_kind(rows) == "loop"
 
 
@@ -409,7 +441,7 @@ def model_overview():
 
 
 def render():
-    st.set_page_config(page_title="Observation", page_icon="🔎", layout="wide")
+    st.set_page_config(page_title="Observation", page_icon="🔎", layout="wide", initial_sidebar_state="collapsed")
     st.html("""<style>
     .stMainBlockContainer {padding-bottom: 1rem;}
     [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"]
@@ -449,27 +481,23 @@ def render():
     [data-testid="stExpander"] summary img[alt="openai"] {
         filter: drop-shadow(0 0 1px #ffffff);
     }
-    .obs-table-header,
-    [data-testid="stExpander"] summary p:has(img[alt^="loop-"]) {
+    /* Each run uses the same fixed column starts, independent of text length.
+       The expander itself remains full width for request/response details. */
+    [class*="st-key-obs-success-"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p:has(img[alt^="loop-"]),
+    [class*="st-key-obs-error-"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p:has(img[alt^="loop-"]) {
         display: grid;
-        grid-template-columns: 1.5rem 17rem 1.5rem 6rem 1.5rem 11rem 10rem;
-        column-gap: 1rem;
+        grid-template-columns: 1.5rem 12.5rem 1.6rem 7rem 1.6rem minmax(13rem, 1fr) 10rem;
+        column-gap: 1.25rem;
         align-items: center;
-        width: 100%;
+        min-width: 57rem;
+        white-space: nowrap;
     }
-    .obs-table-header {
-        padding: 0.5rem 1rem 0.5rem 2.3rem;
-        font-weight: 600;
-        color: var(--text-color);
-        opacity: 0.75;
-    }
+    [data-testid="stExpander"] summary:has(img[alt^="loop-"]) { overflow-x: auto; }
     [data-testid="stExpander"] summary p:has(img[alt^="loop-"]) code {
         background: transparent; color: inherit; padding: 0;
         font-family: inherit; font-size: inherit;
         font-variant-numeric: tabular-nums;
-    }
-    [data-testid="stExpander"] summary:has(img[alt^="loop-"]) {
-        overflow-x: auto;
+        white-space: nowrap;
     }
     .st-key-obs-provider-filter img[alt="openai"],
     [class*="st-key-obs-model-option-"] img[alt="openai"] {
@@ -519,8 +547,8 @@ def render():
         st.session_state["observation_test_open"] = True
     if st.session_state.get("observation_test_open"):
         test_dialog()
-    source = source_column.selectbox("Quelle", ["Alle", "application", "evaluation"], label_visibility="collapsed",
-                          format_func=lambda value: {"Alle": "Alle Quellen", "application": "Ticketanfragen",
+    source = source_column.selectbox("Quelle", ["Alle", "application", "chat", "evaluation"], label_visibility="collapsed",
+                          format_func=lambda value: {"Alle": "Alle Quellen", "application": "Ticketanfragen", "chat": "Chat",
                                                       "evaluation": "Evaluationen"}[value])
     refresh_column.button("Aktualisieren", width="stretch")
     view = view_column.radio("Ansicht", ["Anfragen", "Modelle & Limits"], horizontal=True, label_visibility="collapsed")
@@ -569,29 +597,54 @@ def render():
     for row in rows:
         key = row.get("run_id") or row["id"]
         groups.setdefault(key, []).append(row)
-    groups = dict(list(groups.items())[:200])
+    # Render only a small first page. Hundreds of nested Streamlit expanders
+    # substantially delay the initial page and navigation transition.
+    available_runs = len(groups)
+    page_size = 20
+    page_count = max(1, (available_runs + page_size - 1) // page_size)
+    # Centered pagination, rather than an unlabeled numeric stepper.
+    if "observation_page" not in st.session_state:
+        st.session_state["observation_page"] = 1
+    if st.session_state["observation_page"] > page_count:
+        st.session_state["observation_page"] = page_count
+    if page_count > 1:
+        _, previous_col, page_col, next_col, _ = st.columns([3, 1.5, 2.3, 1.5, 3], vertical_alignment="center")
+        page = st.session_state["observation_page"]
+        if previous_col.button("← Zurück", key="obs-prev-page", disabled=page == 1, width="stretch"):
+            st.session_state["observation_page"] = page - 1
+            st.rerun()
+        page_col.selectbox("Seite", range(1, page_count + 1),
+                           format_func=lambda value: f"Seite {value} von {page_count}",
+                           key="observation_page", label_visibility="collapsed")
+        page = st.session_state["observation_page"]
+        if next_col.button("Weiter →", key="obs-next-page", disabled=page == page_count, width="stretch"):
+            st.session_state["observation_page"] = page + 1
+            st.rerun()
+    else:
+        page = 1
+    groups = dict(list(groups.items())[(page - 1) * page_size:page * page_size])
     rows = [row for group in groups.values() for row in group]
     pending = sum(not r["completed_at"] for r in rows)
     failed = sum(r["error_json"] is not None for r in rows)
-    st.caption(f"{len(groups)} Läufe · {len(rows)} Anfragen · {pending} ausstehend · {failed} Fehler · Neueste 200 Läufe")
-    st.html('<div class="obs-table-header"><span></span><span>Zeitstempel</span><span></span><span>Dauer</span><span></span><span>Modellname</span><span>Kosten</span></div>')
+    st.caption(f"{available_runs} Läufe insgesamt · Seite {page}/{page_count} · {len(rows)} Anfragen auf dieser Seite · {pending} ausstehend · {failed} Fehler")
+    st.caption("Zeitstempel　 ·　 Dauer　 ·　 Modellname　 ·　 Kosten")
     for run_id, requests in groups.items():
         try:
-            timestamp = datetime.fromisoformat(requests[0]["created_at"]).astimezone().strftime("%d.%m.%Y\u2003\u2003\u2003%H:%M:%S")
+            timestamp = datetime.fromisoformat(requests[0]["created_at"]).astimezone().strftime("%d.%m.%Y %H:%M:%S")
         except (ValueError, TypeError):
             timestamp = str(requests[0]["created_at"])
-        label = f"{status_icon(requests)} `{timestamp}` " + loop_marker(requests)
-        label += f" `{run_duration(requests)}` " + provider_logos(requests)
-        label += f" `{run_cost(requests)}`"
+        label = (f"{status_icon(requests)} `{timestamp}` " + loop_marker(requests)
+                 + f" `{run_duration(requests)}` " + provider_logos_markdown(requests)
+                 + f" `{run_cost(requests)}`")
         with status_expander(label, requests, run_id):
             st.caption(f"Lauf-Kennung: {run_id}")
-            costs = [stored_metrics(r).get("estimated_standard_cost_usd") for r in requests]
+            costs = [effective_cost(r) for r in requests]
             known = [cost for cost in costs if cost is not None]
             st.caption(f"Geschätzte Standardkosten: ${sum(known):.8f} · {len(known)}/{len(costs)} Anfragen mit Kostendaten" if known else "Kosten dieses Laufs unbekannt")
             _, content = st.columns([1, 30])
             with content:
                 for number, row in enumerate(requests, 1):
-                    with status_expander(f"{status_icon([row])} {number}. {row['provider']} · {row['model']}\u2003\u2003{run_duration([row])}\u2003\u2003{run_cost([row])}", [row], row["id"] + "-request"):
+                    with status_expander(f"{status_icon([row])} {number}. {row['provider']} · {display_model(row['provider'], row['model'])}\u2003\u2003{run_duration([row])}\u2003\u2003{run_cost([row])}", [row], row["id"] + "-request"):
                         st.caption(f"Quelle: {row['source']} · Kennung: {row['id']} · Start: {row['created_at']}")
                         if row["completed_at"]:
                             try:
@@ -608,7 +661,6 @@ def render():
                                     st.json(json.loads(row[field]))
                                 except (TypeError, ValueError):
                                     st.text(row[field])
-
 
 if __name__ == "__main__":
     render()

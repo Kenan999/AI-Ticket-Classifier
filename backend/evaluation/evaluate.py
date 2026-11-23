@@ -77,11 +77,13 @@ SAMPLE_SEED = 42
 # Datei, damit ein Lauf nie das Ergebnis des anderen ueberschreibt.
 BASELINE = "baseline"
 GEMINI = "gemini"
+LOCAL = "local"
 PROVIDERS = {
     BASELINE: {
         "label": "Regeln (V0)",
         "suffix": "v0",
     },
+    LOCAL: {"label": "Local Qwen3-4B", "suffix": "local", "provider": LOCAL, "prompt_version": DEFAULT_PROMPT_VERSION},
     GEMINI: {
         "label": "Gemini (Standard)",
         "suffix": "gemini",
@@ -266,6 +268,13 @@ def classify_ticket(text, provider=BASELINE, env=None):
 
     env = env if env is not None else load_env()
     name = method["provider"]
+    if name == "local":
+        from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
+        try:
+            prediction = classify_with_local(text, categories=configured_categories(env.get("LLM_CATEGORIES", "")), model=env.get("LOCAL_LLM_MODEL", DEFAULT_LOCAL_MODEL), timeout=float(env.get("LOCAL_LLM_TIMEOUT_SECONDS", "30")), observation_source="evaluation", prompt_version=method["prompt_version"])
+            return prediction.category, prediction.confidence, prediction.model_version, ""
+        except (LLMError, ValueError, OverflowError) as exc:
+            return "FEHLER", 0.0, "local:nicht erreichbar", type(exc).__name__
     if name == "openai":
         adapter, default_model = classify_with_openai, DEFAULT_OPENAI_MODEL
     else:
@@ -316,7 +325,10 @@ def run_evaluation(tickets, provider=BASELINE, *, batch=False, progress=None):
         raise ValueError("Evaluation request interval must be between 0 and 600 seconds")
     batched = None
     if batch and provider != BASELINE:
-        from backend.evaluation.batching import run
+        if PROVIDERS[provider].get("provider") == LOCAL:
+            from backend.evaluation.local_batch import run
+        else:
+            from backend.evaluation.batching import run
         batched = iter(run(tickets, PROVIDERS[provider], env, sleep, progress=progress))
     results = []
     for ticket in tickets:

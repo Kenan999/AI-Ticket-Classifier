@@ -1,7 +1,7 @@
 {
   "database": {
     "type": "sqlite",
-    "path": "results/observation/observation.sqlite3"
+    "path": "/Users/kenanali/Documents/GitHub/AI-Ticket-Classifier/results/observation/observation.sqlite3"
   },
   "service": {
     "host": "127.0.0.1",
@@ -54,6 +54,7 @@
     "enabled": true,
     "sources": [
       "application",
+      "chat",
       "evaluation"
     ],
     "sqlite_timeout_seconds": 0.05,

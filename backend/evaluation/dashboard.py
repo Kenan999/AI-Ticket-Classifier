@@ -597,7 +597,7 @@ def display_model(value):
     """Remove evaluation metadata from a recorded model identifier for display only."""
     value = str(value or "Unbekannt")
     parts = value.split(":")
-    if len(parts) > 1 and parts[0] in {"gemini", "openai"}:
+    if len(parts) > 1 and parts[0] in {"gemini", "openai", "local"}:
         value = parts[1]
     return value
 
@@ -615,7 +615,9 @@ def model_label(provider, results=None):
     else:
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         engine = method["provider"]
-        name = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
+        from backend.llms.local import DEFAULT_LOCAL_MODEL
+        default = DEFAULT_LOCAL_MODEL if engine == "local" else (DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
+        name = load_env().get("LOCAL_LLM_MODEL" if engine == "local" else engine.upper() + "_MODEL", default)
 
     return name + " · " + str(method.get("prompt_version", "V1"))
 
