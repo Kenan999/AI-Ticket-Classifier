@@ -14,6 +14,8 @@ const STATUS_HUMAN_REVIEW = "human_review";
 const STATUS_LABELS = {
   classified: "Classified",
   human_review: "Needs review",
+  classifying: "Classifying",
+  waiting: "Waiting",
   reviewed: "Manually reviewed",
 };
 
@@ -28,18 +30,21 @@ const CATEGORIES = [
 
 // Development helper: one example ticket per backend category, for the buttons under the form.
 const EXAMPLE_TICKETS = [
-  { label: "Shipping", text: "Where is my delivery? My package was supposed to arrive three days ago." },
-  { label: "Returns", text: "I want a refund, my item arrived damaged and I need to return it." },
-  { label: "Billing", text: "My payment failed and my card was charged twice, please check my payment." },
-  { label: "Orders", text: "I want to cancel my order, please cancel the purchase." },
-  { label: "Account", text: "I cannot log in to my account, I forgot my password." },
-  // Unclear text: the backend is unsure, so the ticket lands in Human Review.
-  { label: "Human Review", text: "Something is odd, I do not know what to say here." },
+  { label: "ACCOUNT", text: "I cannot sign in to my account because I forgot my password." },
+  { label: "ORDER", text: "I placed an order yesterday and would like to cancel it." },
+  { label: "INVOICE", text: "Could you send me the invoice for my recent purchase?" },
+  { label: "CONTACT", text: "How can I contact a customer service representative?" },
+  { label: "PAYMENT", text: "My card payment was declined, but the amount was deducted." },
+  { label: "FEEDBACK", text: "I would like to share feedback about my shopping experience." },
+  { label: "REFUND", text: "I returned the damaged product and would like to know when my refund will arrive." },
+  { label: "DELIVERY", text: "My order was due to arrive yesterday, but I have not received it." },
+  { label: "SHIPPING", text: "Has my order been shipped, and can I get a tracking number?" },
 ];
 
 const state = {
   classified: [],
   review: [],
+  progress: [],
 };
 
 const form = document.getElementById("ticket-form");
@@ -121,7 +126,7 @@ function setBackendStatus(state, text) {
 async function submitTicket(message) {
   const result = await apiRequest("/classify", {
     method: "POST",
-    body: JSON.stringify({ text: message }),
+    body: JSON.stringify({ text: message, ...(window.ShoplyTicketProvider ? {provider:window.ShoplyTicketProvider} : {}) }),
   });
   return toTicket(result);
 }
@@ -143,8 +148,30 @@ function toTicket(result) {
 async function loadTickets() {
   const cases = await apiRequest("/cases");
   const tickets = cases.map(toTicket);
+  // Chat-originated tickets use the same card renderer and ticket lists.
+  const chatApi=window.APP_CONFIG?.chatApiBase||(localHost?'http://127.0.0.1:8016':window.location.origin);
+  try{
+    const response=await fetch(chatApi+'/api/chat/tickets',{cache:'no-store'});
+    if(!response.ok)throw Error('Chat tickets unavailable');
+    const data=await response.json();
+    for(const item of data.tickets){
+      if(!['classified','human_review','classifying','waiting'].includes(item.status))continue;
+      tickets.push({
+        id:'T-'+item.id.slice(0,12).toUpperCase(),
+        message:item.message,
+        category:item.category,
+        confidence:item.confidence==null?null:Math.round(item.confidence*100),
+        status:item.status,
+        source:'chat',
+        chatTicketId:item.id,
+        supportRequestId:item.support_request_id,
+        supportStatus:item.support_status
+      });
+    }
+  }catch(error){console.warn('Chat tickets could not be loaded:',error);}
+  state.progress = tickets.filter((ticket) => ticket.status === "classifying" || ticket.status === "waiting");
   state.review = tickets.filter((ticket) => ticket.status === STATUS_HUMAN_REVIEW);
-  state.classified = tickets.filter((ticket) => ticket.status !== STATUS_HUMAN_REVIEW);
+  state.classified = tickets.filter((ticket) => ticket.status === "classified" || ticket.status === "reviewed");
 }
 
 // POST /review: a human confirms ("approve") or changes ("correct") the category.
@@ -203,9 +230,15 @@ function createTicketCard(ticket) {
   message.textContent = ticket.message;
 
   card.append(head, message);
+  if(ticket.supportRequestId){
+    const detail=document.createElement('p');
+    detail.className='ticket-message';
+    detail.textContent='Support: '+(ticket.supportStatus==='active'?'Agent connected':ticket.supportStatus==='closed'?'Conversation ended':'Awaiting agent reply');
+    card.append(detail);
+  }
 
   // Only tickets waiting for a human get the review buttons.
-  if (ticket.status === STATUS_HUMAN_REVIEW) {
+  if (ticket.status === STATUS_HUMAN_REVIEW && ticket.source !== "chat") {
     card.append(createReviewActions(ticket));
   }
 
@@ -287,6 +320,8 @@ function renderList(listEl, tickets, emptyText, isError = false) {
 }
 
 function renderDashboard() {
+  document.getElementById("progress-count").textContent = state.progress.length;
+  renderList(document.getElementById("progress-list"), state.progress, "No tickets in progress.");
   document.getElementById("classified-count").textContent = state.classified.length;
   document.getElementById("review-count").textContent = state.review.length;
   renderList(classifiedList, state.classified, "No tickets yet. New tickets will show up here.");
@@ -370,6 +405,8 @@ EXAMPLE_TICKETS.forEach((example) => {
 renderDashboard();
 checkBackendHealth();
 reloadTickets();
+// Keep Support Center synchronized with new customer chat tickets.
+setInterval(()=>{if(!document.hidden)reloadTickets();},1200);
 
 // Loads the saved tickets and shows them. Used on page open and by the Reload button.
 async function reloadTickets() {
@@ -381,6 +418,7 @@ async function reloadTickets() {
     // Simple red error message in both lists if the tickets cannot be loaded.
     state.classified = [];
     state.review = [];
+    state.progress = [];
     renderDashboard();
     renderList(classifiedList, [], error.message, true);
     renderList(reviewList, [], error.message, true);
@@ -393,3 +431,28 @@ reloadButton.addEventListener("click", () => {
   checkBackendHealth();
   reloadTickets();
 });
+
+// Switch customer views without changing the existing category form.
+(() => {
+  const tabs = [document.getElementById("category-tab"), document.getElementById("chat-tab")];
+  const panels = [document.getElementById("category-panel"), document.getElementById("chat-panel")];
+  if (tabs.some(t => !t) || panels.some(p => !p)) return;
+  function select(index, focus = false) {
+    tabs.forEach((tab, i) => {
+      tab.setAttribute("aria-selected", String(i === index));
+      tab.tabIndex = i === index ? 0 : -1;
+      panels[i].hidden = i !== index;
+    });
+    if (focus) tabs[index].focus();
+  }
+  tabs.forEach((tab, i) => {
+    tab.addEventListener("click", () => select(i));
+    tab.addEventListener("keydown", event => {
+      if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (i + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length;
+      select(next, true);
+    });
+  });
+  select(0);
+})();
