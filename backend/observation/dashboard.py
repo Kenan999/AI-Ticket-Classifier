@@ -1,5 +1,6 @@
 """Standalone, read-only Streamlit observation dashboard."""
 import json
+import base64
 import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
@@ -45,13 +46,31 @@ def load_rows(path, source):
         return [dict(row) for row in db.execute(query, params)]
 
 
+def group_kind(rows):
+    """Chat session requests are conversations, not processing loops."""
+    if rows and all(row.get("source") == "chat" for row in rows):
+        return "conversation" if len(rows) > 1 else "single"
+    return "loop" if len(rows) > 1 else "single"
+
+
 def loop_marker(rows):
-    import base64
-    path = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" fill="#8b95a5"/>' if is_loop(rows) else ""
+    """Static speech-bubble icon for multi-turn chat; original glyph for loops."""
+    kind = group_kind(rows)
+    if kind == "conversation":
+        path = ('<path d="M5 4h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H9l-6 3V7a3 3 0 0 1 3-3z" '
+                'fill="none" stroke="#9aa9e8" stroke-width="1.7" stroke-linejoin="round"/>'
+                '<circle cx="9" cy="12" r="1.15" fill="#9aa9e8"/>'
+                '<circle cx="13" cy="12" r="1.15" fill="#9aa9e8"/>'
+                '<circle cx="17" cy="12" r="1.15" fill="#9aa9e8"/>')
+        alt = "conversation-static"
+    elif kind == "loop":
+        path = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" fill="#8b95a5"/>'
+        alt = "loop-animated"
+    else:
+        path = ""
+        alt = "loop-slot"
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">{path}</svg>'
-    data = base64.b64encode(svg.encode()).decode()
-    alt = "loop-animated" if is_loop(rows) else "loop-slot"
-    return f"![{alt}](data:image/svg+xml;base64,{data})"
+    return f"![{alt}](data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()})"
 
 
 def provider_logos(rows):
@@ -90,22 +109,13 @@ def run_duration(rows):
 
 
 def is_loop(rows):
-    if len(rows) > 1:
-        return True
-    for row in rows:
-        try:
-            request = json.loads(row["request_json"])
-            if isinstance(request, dict) and request.get("_observation", {}).get("run_kind") == "loop":
-                return True
-        except (ValueError, TypeError, AttributeError):
-            pass
-    return False
+    return group_kind(rows) == "loop"
 
 
 @contextmanager
 def status_expander(label, rows, key):
     state = "error" if any(r["error_json"] is not None for r in rows) else "success"
-    kind = "loop" if is_loop(rows) else "single"
+    kind = group_kind(rows)
     with st.container(key=f"obs-{state}-{kind}-{key}"):
         with st.expander(label):
             yield
@@ -529,17 +539,26 @@ def render():
     if not rows:
         st.info("Noch keine Anfragen gespeichert. Neue LLM-Anfragen erscheinen hier, wenn die Aufzeichnung aktiviert ist.")
         return
-    model_options = sorted({(r["provider"], r["model"]) for r in rows})
+    # Only offer currently configured models. Historical observations remain intact.
+    from backend.llms.config import model_configuration
+    from backend.evaluation.evaluate import load_env
+    current_models = {(item["id"], item["model"])
+                      for item in model_configuration(load_env())["llms"]}
+    model_options = sorted({(r["provider"], r["model"]) for r in rows}
+                           & current_models)
     selected = st.session_state.get("obs_model_filter")
     if selected not in model_options:
         selected = None
-    current_label = "Alle Modelle" if selected is None else provider_logos([{"provider": selected[0], "model": selected[1]}]) or selected[1]
+    def model_option_label(option):
+        provider, model = option
+        return f"{provider.title()} · {display_model(provider, model)}"
+    current_label = "Alle Modelle" if selected is None else model_option_label(selected)
     with provider_column.popover(current_label, width="stretch"):
         if st.button("Alle Modelle", key="obs-model-all", width="stretch"):
             st.session_state["obs_model_filter"] = None
             st.rerun()
         for index, option in enumerate(model_options):
-            label = provider_logos([{"provider": option[0], "model": option[1]}]) or option[1]
+            label = model_option_label(option)
             if st.button(label, key=f"obs-model-option-{index}", width="stretch",
                          type="primary" if option == selected else "secondary"):
                 st.session_state["obs_model_filter"] = option
