@@ -4,7 +4,7 @@ import re
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from backend.keyword_classifier import CATEGORY_GUIDANCE, PredictionResult
+from backend.tickets.categories import CATEGORY_GUIDANCE, PredictionResult
 from ..gemini import configured_categories
 from ..retry import LLMError, read_provider_response
 from backend.observation.tracing import observed_call

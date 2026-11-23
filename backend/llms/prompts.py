@@ -20,7 +20,7 @@ BASE_PROMPT = (
 
 # V3 has the same text for both providers. It splits the
 # instructions into sections and describes the confidence scale; the
-# bands match REVIEW_THRESHOLD in backend/keyword_classifier.py.
+# bands match REVIEW_THRESHOLD in backend/tickets/categories.py.
 # render_prompt appends the category meanings, so the output section
 # stays above them.
 PROMPT_V3 = (
@@ -63,7 +63,7 @@ PROMPT_V3 = (
 # instructions and category guidance; the provider is validated for callers.
 PROMPTS = {"V1": BASE_PROMPT, "V2": BASE_PROMPT, "V3": PROMPT_V3}
 
-# V1 uses the shared description in backend/keyword_classifier.py.
+# V1 uses the shared description in backend/tickets/categories.py.
 # V2 follows the ticket wording of the dataset: SHIPPING is the delivery address of an order,
 # DELIVERY is about delivery times and methods, order status and tracking belong to ORDER.
 CATEGORY_GUIDANCE_V2 = (

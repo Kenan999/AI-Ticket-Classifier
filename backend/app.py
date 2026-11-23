@@ -19,7 +19,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.tickets import case_storage
-from backend.keyword_classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
+from backend.tickets.categories import REVIEW_THRESHOLD, dataset_label_for
+from backend.tickets.replies import suggest_customer_reply
 from backend.tickets.review import ReviewError, save_review
 from backend.llms.openai.config import openai_api_key
 from backend.llms.local import classify_with_local, DEFAULT_LOCAL_MODEL
@@ -27,13 +28,12 @@ from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
 from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
 
 
-PROVIDERS = ("baseline", "openai", "gemini", "local")
+PROVIDERS = ("openai", "gemini", "local")
 
 
 def default_provider():
-    provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
-    # Preserve the existing baseline behavior for unknown deployment settings.
-    return provider if provider in PROVIDERS else "baseline"
+    provider = os.getenv("LLM_PROVIDER", "local").strip().lower()
+    return provider if provider in PROVIDERS else "local"
 
 
 def create_app(review_path=None, case_db_path=None):
@@ -88,7 +88,6 @@ def create_app(review_path=None, case_db_path=None):
         response = jsonify({
             "default_provider": default_provider(),
             "providers": [
-                {"id": "baseline", "label": "Local rules", "configured": True},
                 {"id": "openai", "label": "OpenAI", "configured": bool(openai_api_key())},
                 {"id": "local", "label": "Local Qwen3-4B", "configured": True},
                 {"id": "gemini", "label": "Gemini",
@@ -116,10 +115,10 @@ def create_app(review_path=None, case_db_path=None):
         explicit_provider = "provider" in data
         provider = data.get("provider") if explicit_provider else default_provider()
         if not isinstance(provider, str) or provider not in PROVIDERS:
-            return error("invalid_provider", "provider must be baseline, openai, gemini or local")
+            return error("invalid_provider", "provider must be openai, gemini or local")
 
         # Only this request selects the provider; never mutate process settings.
-        used_provider = "baseline"
+        used_provider = provider
         prediction = None
         if provider == "local":
             try:
@@ -128,14 +127,14 @@ def create_app(review_path=None, case_db_path=None):
             except (LLMError, ValueError, OverflowError):
                 if explicit_provider:
                     return error("provider_unavailable", "Local model could not classify the ticket", 502)
-        elif provider != "baseline":
+        else:
             api_key = (openai_api_key() if provider == "openai"
                        else os.getenv("GEMINI_API_KEY", "").strip())
             if not api_key:
                 if explicit_provider:
                     return error("provider_not_configured",
                                  "Selected provider is not configured on the server", 503)
-                app.logger.warning("%s selected but key missing; using baseline", provider)
+                app.logger.warning("%s selected but key missing", provider)
             else:
                 try:
                     adapter = classify_with_openai if provider == "openai" else classify_with_gemini
@@ -152,7 +151,7 @@ def create_app(review_path=None, case_db_path=None):
                     if explicit_provider:
                         return error("provider_unavailable", "Selected provider could not classify the ticket", 502)
         if prediction is None:
-            prediction = predict_ticket(text)
+            return error("provider_unavailable", "Selected model could not classify the ticket", 502)
         review_required = prediction.confidence < REVIEW_THRESHOLD
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {

@@ -13,7 +13,7 @@ from urllib.error import HTTPError
 
 from backend.app import create_app
 from backend.evaluation import evaluate, batching
-from backend.keyword_classifier import DATASET_CATEGORIES
+from backend.tickets.categories import DATASET_CATEGORIES
 from backend.llms import openai, gemini
 from backend.observation.integration import install_evaluation
 from backend.observation.tracing import run_scope

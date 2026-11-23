@@ -3,7 +3,7 @@ import json
 import os
 from urllib.request import Request, urlopen
 from urllib.error import URLError
-from backend.keyword_classifier import PredictionResult, CATEGORY_GUIDANCE
+from backend.tickets.categories import PredictionResult, CATEGORY_GUIDANCE
 from ..prompts import render_prompt, DEFAULT_PROMPT_VERSION
 from ..retry import LLMError
 from ..gemini import configured_categories

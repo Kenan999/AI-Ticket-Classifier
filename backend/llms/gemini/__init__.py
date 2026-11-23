@@ -10,7 +10,7 @@ from urllib.error import URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from backend.keyword_classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+from backend.tickets.categories import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 from ..retry import LLMError, read_provider_response
 from backend.observation.tracing import observed_call
 from ..prompts import DEFAULT_PROMPT_VERSION, render_prompt

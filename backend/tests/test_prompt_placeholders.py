@@ -1,6 +1,6 @@
 import unittest
 from backend.llms.prompts import render_prompt
-from backend.keyword_classifier import DATASET_CATEGORIES, CATEGORY_GUIDANCE
+from backend.tickets.categories import DATASET_CATEGORIES, CATEGORY_GUIDANCE
 
 class PromptPlaceholderTests(unittest.TestCase):
     def test_configured_versions_render(self):
