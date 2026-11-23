@@ -77,9 +77,9 @@ def provider_logos(rows):
     import base64
     logos = []
     for provider, model in sorted({(row["provider"], row["model"]) for row in rows}):
-        if provider not in {"openai", "gemini"}:
+        if provider not in {"openai", "gemini", "local"}:
             continue
-        path = Path(__file__).with_name("assets") / (provider + ".svg")
+        path = Path(__file__).with_name("assets") / (("qwen" if provider == "local" else provider) + ".svg")
         if path.is_file():
             encoded = base64.b64encode(path.read_bytes()).decode()
             safe_model = str(model).replace("`", "")
