@@ -70,6 +70,9 @@ class Handler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         parsed=urlsplit(self.path)
+        if parsed.path=='/api/chat/status':
+            from backend.chat.connectivity import statuses
+            return self.json_response(200, statuses())
         if parsed.path=='/api/chat/provider':
             config=__import__('backend.chat.service',fromlist=['settings']).settings()
             import os

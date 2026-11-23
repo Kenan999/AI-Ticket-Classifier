@@ -18,6 +18,15 @@ DB = ROOT / 'results' / 'live_chat.sqlite'
 OBS_CONFIG = ROOT / 'backend' / 'observation' / 'config.json'
 
 
+def observation_settings():
+    """Allow the local dashboard and chat service to share one observation store."""
+    config = json.loads(OBS_CONFIG.read_text())
+    override = os.environ.get('IHK_OBSERVATION_DB_PATH')
+    if override:
+        config['database']['path'] = str(Path(override).expanduser().resolve())
+    return config
+
+
 def settings():
     values = {}
     path = ROOT / 'backend' / '.env'
@@ -89,7 +98,7 @@ def reply(session_id, question, order_number=None):
     contents.append({'role': 'user', 'parts': [{'text': question}]})
     payload = {'systemInstruction': {'parts': [{'text': instructions + '\nVerified orders: ' + json.dumps(orders)}]},
                'contents': contents, 'tools': [{'functionDeclarations': INVOICE_DECLARATION['functionDeclarations'] + ORDER_DECLARATION['functionDeclarations']}], 'generationConfig': {'temperature': 0.2, 'maxOutputTokens': 512}}
-    obs = json.loads(OBS_CONFIG.read_text())
+    obs = observation_settings()
     observation_id = uuid4().hex
     request_record = {'session_id': session_id, 'question': question, 'history': history, 'orders': orders, 'model': model}
     try:
@@ -171,7 +180,7 @@ def openai_reply(session_id, question, user_id, history, orders, instructions, c
     messages=[{'role':'system','content':instructions+'\nVerified orders: '+json.dumps(orders)}]
     messages += [{'role':'user' if h['role']=='user' else 'assistant','content':h['content']} for h in history]
     messages.append({'role':'user','content':question})
-    obs=json.loads(OBS_CONFIG.read_text());observation_id=uuid4().hex
+    obs=observation_settings();observation_id=uuid4().hex
     try:store.start(obs,ident=observation_id,source='chat',provider='openai',model=model,request={'question':question,'history':history,'orders':orders},run_id=session_id,created_at=store.timestamp())
     except Exception:pass
     attachments=[];tool_events=[]
@@ -219,7 +228,7 @@ def local_reply(session_id, question, user_id, history, orders, instructions):
     messages = [{'role': 'system', 'content': instructions + '\nVerified orders: ' + json.dumps(orders)}]
     messages.extend({'role': 'user' if h['role'] == 'user' else 'assistant', 'content': h['content']} for h in history)
     messages.append({'role': 'user', 'content': question})
-    obs = json.loads(OBS_CONFIG.read_text())
+    obs = observation_settings()
     ident = uuid4().hex
     try:
         store.start(obs, ident=ident, source='chat', provider='local', model=model,
