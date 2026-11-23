@@ -33,8 +33,8 @@ def create_app(config_path=DEFAULT_CONFIG):
     @app.post("/observations")
     def start():
         value = body()
-        if value.get("source") not in {"application", "evaluation"}:
-            abort(400, "source must be application or evaluation")
+        if value.get("source") not in {"application", "chat", "evaluation"}:
+            abort(400, "source must be application, chat, or evaluation")
         if any(not isinstance(value.get(k), str) or not 0 < len(value[k]) <= 200
                for k in ("provider", "model")) or not isinstance(value.get("request"), dict):
             abort(400, "provider, model and request object required")

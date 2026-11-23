@@ -310,8 +310,8 @@ def render_sidebar():
         if engine != BASELINE:
             st.info(f"Modell für neue Tests: {active_models[engine]}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
-                    key="batch_evaluation", disabled=engine == BASELINE)
-        if engine != BASELINE and st.session_state.get("batch_evaluation", True):
+                    key="batch_evaluation", disabled=engine in {BASELINE, "local"})
+        if engine not in {BASELINE, "local"} and st.session_state.get("batch_evaluation", True):
             st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
         supported = provider in PROVIDERS
         prompt_missing = (missing_prompt_message(provider) if supported else
@@ -332,11 +332,11 @@ def render_sidebar():
                         request_status.caption(f"{state['requests']} HTTP-Anfragen · {state['retries']} Wiederholungen · {state['batches']} geplante Batches · {state['errors']} fehlgeschlagene Tickets · {state.get('metadata_requests', 0)} Metadaten-Anfragen")
                         limit_status.caption(f"Limits: {state.get('limits_source', 'configured')}. Kontingentinformationen nur soweit der Provider sie liefert.")
                         st.session_state["last_batch_progress"] = dict(state, provider=provider, mode=mode)
-                    measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True),
+                    measured = run_evaluation(progress=show_progress,batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local",
                         tickets=tickets, provider=provider,
                     )
                     save_results(
-                        measured, results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)),
+                        measured, results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local"),
                     )
             except (RuntimeError, FileNotFoundError, ValueError) as exc:
                 st.error(str(exc))
@@ -353,7 +353,7 @@ def render_sidebar():
         st.divider()
         st.caption("Ergebnisdatei")
         if supported:
-            st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True)).name, language=None)
+            st.code(results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local").name, language=None)
         return provider, mode, prompt_missing
 
 
@@ -579,7 +579,7 @@ def version_metrics(version, mode=None):
     provider = version["provider"]
     if provider not in PROVIDERS or missing_prompt_message(provider):
         return None
-    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local")
     if not path.is_file():
         return None
     results = load_results(path)
@@ -597,7 +597,7 @@ def display_model(value):
     """Remove evaluation metadata from a recorded model identifier for display only."""
     value = str(value or "Unbekannt")
     parts = value.split(":")
-    if len(parts) > 1 and parts[0] in {"gemini", "openai"}:
+    if len(parts) > 1 and parts[0] in {"gemini", "openai", "local"}:
         value = parts[1]
     return value
 
@@ -615,7 +615,9 @@ def model_label(provider, results=None):
     else:
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         engine = method["provider"]
-        name = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
+        from backend.llms.local import DEFAULT_LOCAL_MODEL
+        default = DEFAULT_LOCAL_MODEL if engine == "local" else (DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
+        name = load_env().get("LOCAL_LLM_MODEL" if engine == "local" else engine.upper() + "_MODEL", default)
 
     return name + " · " + str(method.get("prompt_version", "V1"))
 
@@ -1104,7 +1106,7 @@ def main():
         render_version_comparison(mode)
         return
 
-    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True))
+    path = results_path(provider, mode, batch=st.session_state.get("batch_evaluation", True) and provider.split("-")[0] != "local")
     if not path.is_file():
         st.title("Ticket-Klassifikator – Evaluation")
         st.warning(
