@@ -19,7 +19,8 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.tickets import case_storage
-from backend.keyword_classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
+from backend.keyword_classifier import predict_ticket, suggest_customer_reply, dataset_label_for
+from backend.review_threshold import get_threshold
 from backend.tickets.review import ReviewError, save_review
 from backend.llms.config import openai_api_key
 from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
@@ -144,7 +145,7 @@ def create_app(review_path=None, case_db_path=None):
                         return error("provider_unavailable", "Selected provider could not classify the ticket", 502)
         if prediction is None:
             prediction = predict_ticket(text)
-        review_required = prediction.confidence < REVIEW_THRESHOLD
+        review_required = prediction.confidence < get_threshold()
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
             "ticket_id": ticket_id,
