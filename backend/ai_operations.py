@@ -20,7 +20,7 @@ st.html("""<style>
         left: 50%;
         transform: translate(-50%, -50%);
         /* A definite width prevents overflow measurement from shrinking to "2 more". */
-        width: 20rem;
+        width: 35rem;
         justify-content: center;
         max-width: calc(100% - 8rem);
         margin: 0;
@@ -35,6 +35,7 @@ page = st.navigation(
     [
         st.Page("evaluation/dashboard.py", title="Evaluation", default=True),
         st.Page("observation/dashboard.py", title="Observation", url_path="observation"),
+        st.Page("llm_configuration.py", title="LLM Configuration", url_path="llm-configuration"),
     ],
     position="top",
 )
