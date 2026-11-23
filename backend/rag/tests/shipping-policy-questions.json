@@ -1,0 +1,562 @@
+[
+  {
+    "question": "Do you ship to Germany?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Germany? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Austria?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Austria? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to France?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to France? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Spain?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Spain? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to a PO box?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to a PO box? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Luxembourg?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Luxembourg? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Belgium?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Belgium? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to the Netherlands?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to the Netherlands? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Switzerland?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to Switzerland? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to an island?",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "Do you ship to an island? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-01"
+  },
+  {
+    "question": "How much is German standard shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is German standard shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is German express shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is German express shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is French shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is French shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Austrian shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Austrian shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Belgian shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Belgian shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Dutch shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Dutch shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Luxembourg shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is Luxembourg shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is free German shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is free German shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is weekend shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is weekend shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is international shipping?",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "How much is international shipping? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-02"
+  },
+  {
+    "question": "Can I change the address after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I change the address after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I change the country after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I change the country after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I change shipping method after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I change shipping method after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I track my parcel after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I track my parcel after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I split my shipment after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I split my shipment after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I get a tracking link after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I get a tracking link after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I redirect a package after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I redirect a package after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I update my apartment number after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I update my apartment number after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I receive separate parcels after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I receive separate parcels after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I correct the postal code after placing an order?",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "Can I correct the postal code after placing an order? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-03"
+  },
+  {
+    "question": "What happens if my parcel is late?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if my parcel is late? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if tracking has not updated?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if tracking has not updated? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if tracking says delivered but I cannot find it?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if tracking says delivered but I cannot find it? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the courier missed me?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the courier missed me? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is lost?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is lost? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if delivery is attempted twice?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if delivery is attempted twice? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is returned?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is returned? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if international tracking stops?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if international tracking stops? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if I missed pickup?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if I missed pickup? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is stolen?",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What happens if the parcel is stolen? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-04"
+  },
+  {
+    "question": "What should I do if my item is broken?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if my item is broken? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if my parcel contains the wrong item?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if my parcel contains the wrong item? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if one item is missing?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if one item is missing? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the box is crushed?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the box is crushed? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if I forgot to take photos?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if I forgot to take photos? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if my delivery is incomplete?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if my delivery is incomplete? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the product is scratched?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the product is scratched? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if a package is empty?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if a package is empty? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if I got someone else’s item?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if I got someone else’s item? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the seal is damaged?",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "What should I do if the seal is damaged? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-05"
+  },
+  {
+    "question": "Can I cancel before dispatch?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I cancel before dispatch? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I cancel after dispatch?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I cancel after dispatch? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return opened headphones?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return opened headphones? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return after 20 days?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return after 20 days? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return after 40 days?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return after 40 days? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get express shipping refunded?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get express shipping refunded? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return customized goods?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return customized goods? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get a refund to a different card?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get a refund to a different card? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return an unsealed hygiene product?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I return an unsealed hygiene product? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get return shipping paid?",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "Can I get return shipping paid? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-06"
+  },
+  {
+    "question": "What happens during a strike?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a strike? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during severe weather?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during severe weather? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a carrier outage?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a carrier outage? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a customs delay?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a customs delay? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a payment review?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a payment review? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a suspected theft?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a suspected theft? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a data privacy complaint?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a data privacy complaint? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a chargeback dispute?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a chargeback dispute? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a public holiday?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a public holiday? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a legal dispute?",
+    "expected_policy_id": "SHIP-07"
+  },
+  {
+    "question": "What happens during a legal dispute? Please explain the exceptions.",
+    "expected_policy_id": "SHIP-07"
+  }
+]
