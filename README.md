@@ -2,11 +2,11 @@
 
 Python backend for an AI-assisted customer-support ticket classifier. It provides a Flask API to receive tickets, classify them with a transparent keyword-based baseline, suggest customer replies, and route uncertain cases for human review. Tickets are stored locally in SQLite, and review decisions are recorded in CSV.
 
-The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The default classifier is rule-based; optional Gemini and OpenAI adapters can be enabled with server-side credentials.** This is a local development backend and is not yet configured for public deployment.
+The project also includes Bitext dataset download, loading, and preprocessing modules for future model training and evaluation. **The default classifier is rule-based; optional Gemini and OpenAI adapters can be enabled with server-side credentials.** The backend can run locally or as a separately configured server service; publishing frontend files alone does not start the API.
 
 ## Dataset preparation
 
-After installing `requirements.txt`, run `python backend/prepare_data.py` once
+After installing `backend/requirements.txt`, run `python backend/data/prepare_data.py` once
 at setup/deployment. It downloads and SHA-256-verifies the pinned Bitext CSV,
 then prepares `data/processed/train.csv`, `validation.csv`, and `test.csv`.
 Repeated runs verify the source and skip unchanged processed outputs. Run this
@@ -17,14 +17,14 @@ then deduplicates messages before splitting. The result contains nine dataset
 labels: 18,291 training messages, 1,800 validation messages and 1,800 test
 messages (200 per label in each evaluation split). Baseline, Gemini, and
 OpenAI all use the same nine dataset labels. See
-[dataset preparation details](docs/dataset_comparison.md).
+[dataset preparation details](backend/docs/dataset_comparison.md).
 
 ## Local setup
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-python -m pip install -r requirements.txt
+python -m pip install -r backend/requirements.txt
 ```
 
 `.venv/` stays outside Git. Activate it in every new terminal before running
@@ -32,7 +32,7 @@ any of the commands below.
 
 ## Local API and tests
 
-Install dependencies with `python -m pip install -r requirements.txt` and start
+Install dependencies with `python -m pip install -r backend/requirements.txt` and start
 `python backend/app.py` (defaults to `127.0.0.1:8001`).
 
 - `GET /health`: health check.
@@ -46,9 +46,9 @@ Install dependencies with `python -m pip install -r requirements.txt` and start
 
 ## Evaluation
 
-`evaluation/` measures the classifier against the prepared Bitext splits. It
+`backend/evaluation/` measures the classifier against the prepared Bitext splits. It
 imports the backend directly — no API, database or frontend — and never
-modifies backend files or the dataset. Run `python backend/prepare_data.py`
+modifies backend files or the dataset. Run `python backend/data/prepare_data.py`
 first; the evaluation reads `data/processed/` and nothing else.
 
 The **dataset labels are the ground truth**. Predictions use the exact
@@ -66,16 +66,16 @@ and every machine measures exactly the same tickets:
 | `final` | `test.csv` | all (200 per label) | independent acceptance |
 
 ```bash
-python -m evaluation.evaluate                     # smoke, rule baseline
-python -m evaluation.evaluate --mode validation
-python -m evaluation.evaluate --mode final
-python -m evaluation.evaluate --provider gemini-v1 --mode validation
-python -m evaluation.evaluate --provider openai-v1 --mode validation
-python -m streamlit run evaluation/dashboard.py   # 127.0.0.1:8501
+python -m backend.evaluation.evaluate                     # smoke, rule baseline
+python -m backend.evaluation.evaluate --mode validation
+python -m backend.evaluation.evaluate --mode final
+python -m backend.evaluation.evaluate --provider gemini-v1 --mode validation
+python -m backend.evaluation.evaluate --provider openai-v1 --mode validation
+(cd backend && python -m streamlit run evaluation/dashboard.py)   # 127.0.0.1:8501
 ```
 
 Gemini and OpenAI reuse their backend adapters and the shared system prompts
-in `evaluation/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
+in `backend/llms/prompts.py`. V1 uses identical instructions for Gemini and OpenAI.
 V2 and V3 are empty placeholders for future prompts; selecting either raises a
 not-configured error before any provider call. The dashboard shows a prompt-entry
 message and disables execution for those empty versions.
@@ -92,12 +92,12 @@ and counted as wrong; it does **not** fall back to the rule baseline, because a
 mixed result would not be measurable.
 
 Generate new results after switching to the nine-label classifier so
-comparisons use the same taxonomy. See [evaluation details](docs/evaluation.md)
+comparisons use the same taxonomy. See [evaluation details](backend/docs/evaluation.md)
 for the method and metrics.
 
 ## Tests
 
-Run isolated tests with `python3 -m unittest discover -s tests -v`.
+Run isolated tests with `python3 -m unittest discover -s backend/tests -v`.
 Cases are stored in `results/cases.sqlite` and review feedback in
 `results/reviews.csv` by default; these runtime files must not be committed.
 By default classification uses the keyword baseline. Set `LLM_PROVIDER=gemini`
@@ -107,7 +107,7 @@ provider. Gemini reads `GEMINI_API_KEY` and `GEMINI_MODEL` (default
 (default `gpt-4.1-mini`). Deployment supplies these settings at runtime;
 keep real keys out of source control and the frontend. OpenAI's key is read
 only from the process environment. See
-[optional LLM integration](docs/llm_integration.md) for additional Gemini settings.
+[optional LLM integration](backend/docs/llm_integration.md) for additional Gemini settings.
 When `provider` is omitted, the deployment default and existing local fallback
 behavior are retained. An explicit provider applies only to that request: it
 never changes other users' selections or the server environment. Explicit cloud
@@ -125,7 +125,7 @@ and model settings on the server. Only `text` and optional `provider` are
 accepted in classification requests; other fields return HTTP 400
 (`unsupported_fields`). The deployment owner controls model names, credentials,
 timeout and categories through the server environment. There is no API to change
-these settings or prompts. See the [model and prompt reference](docs/llm_integration.md).
+these settings or prompts. See the [model and prompt reference](backend/docs/llm_integration.md).
 This contract is implemented only in the
 backend development copy: frontend controls and deployment gateway routing for
 `/providers` still need separate integration before public use.
@@ -135,6 +135,20 @@ into `main` for the existing deployment workflow. This checkout is not live.
 
 The evaluation dashboard shows the rule baseline and explicit Gemini/OpenAI
 V1–V3 entries. The duplicate Gemini Standard option is omitted.
+
+## Shoply frontend
+
+Main serves its frontend from `frontend/` and routes live requests through
+`/api`. Local previews can set `apiBaseUrl` in their runtime configuration.
+The Human Review correction menu sends the exact nine Bitext labels.
+
+**AI Operations** next to **Reload** opens the evaluation dashboard in a new tab.
+On `localhost` or `127.0.0.1`, it automatically uses `http://127.0.0.1:8501`;
+on the deployed site, it uses the same site’s `/evaluation/` route. No config
+edit is needed when switching between those environments. Start the local
+evaluation service separately with `python -m streamlit run evaluation/dashboard.py`.
+Optional `evaluationUrl` runtime configuration overrides the default for custom
+setups; an empty string hides the link.
 
 ## Downloaded development starter
 
@@ -240,13 +254,12 @@ runs using the same provider key. Existing result files are not changed by this.
 
 ### Evaluation batching
 
-
 Dashboard and CLI now send cloud evaluation tickets in batches. The dashboard
 checkbox switches between batch runs/results and the existing single-ticket runs.
 The application API continues to classify one ticket per request.
 
-Shared settings: `evaluation/config.py`, with separate Gemini and OpenAI model
-profiles. Default maximum: 20 tickets per request, a conservative 16,000 input
+Shared settings: `backend/evaluation/config.py`, with separate Gemini and OpenAI model
+profiles. No fixed ticket-count cap by default; a conservative 16,000 input
 budget, 128 output tokens per ticket plus envelope overhead, and a context reserve.
 Packing uses UTF-8 bytes plus overhead as a conservative sizing estimate, **not an
 exact token count**. It does not attempt to fill the model's entire context window.
@@ -272,3 +285,68 @@ The batch dashboard reports processed-ticket percentage, planned batches, actual
 HTTP attempts (including retries), and failed-ticket count. 100% processed does
 not mean 100% correct or successful. The latest run summary persists in the
 browser session; it is separate from Accuracy and Macro-F1.
+
+Evaluation retry timing is centralized in backend/evaluation/config.py: the default total
+retry budget is now 300 seconds per request/batch, with six seconds between
+requests/batches. Environment overrides still take precedence. Interactive app
+timeouts are unchanged. Provider-directed waits are honored within that budget;
+longer waits report their duration and budget. This does not increase provider
+quotas and still permits at most two retries.
+
+
+Provider observations: Gemini model metadata is queried once per evaluation and
+can reduce the configured input/output ceilings. If unavailable, the UI explicitly
+labels the configured fallback. OpenAI's model metadata did not expose context
+limits in our probe, so its documented profile remains necessary. Successful and
+failed generation responses supply rate-limit headers when available; the next
+batch waits for an advertised request/token reset if remaining capacity is too
+small. Waits exceeding the evaluation budget are reported without sending that
+batch. Headers are snapshots, not reservations, and concurrent clients can consume
+the same quota. Missing headers are treated as unknown, never unlimited.
+
+Batch count is now determined by text size and output reserve, without a fixed
+20-ticket ceiling. UTF-8 sizing remains conservative and is not exact token
+counting; Gemini countTokens is supported but not invoked by this implementation.
+Metadata requests are counted separately from generation requests and retries.
+Only metadata lookups were made while verifying this update, not new model runs.
+
+Batch generation has a separate 60-second network timeout (override with
+EVALUATION_BATCH_TIMEOUT_SECONDS); the normal app timeout stays unchanged.
+Connection, timeout and invalid-response failures are reported separately.
+Runs with only failed requests show unavailable quality metrics rather than
+zero Accuracy/F1, and remain inspectable in the error table. Existing CSVs are
+not changed. Provider quotas still apply and cannot be increased by this code.
+
+## LLM module layout
+
+`backend/llms/` contains `gemini.py`, `openai.py`, shared `prompts.py` and
+`retry.py`. Both the API and evaluation import these modules. The keyword
+baseline remains in `backend/keyword_classifier.py`.
+
+## Backend workspace
+
+Backend owns `requirements.txt`, `tests/`, `evaluation/`, `docs/`, and
+`.streamlit/`. Data and generated results remain at the repository root.
+From the repository root, install with `python -m pip install -r backend/requirements.txt`
+and test with `python -m unittest discover -s backend/tests -v`.
+Start the dashboard with `cd backend` then
+`python -m streamlit run evaluation/dashboard.py` so Streamlit loads the backend
+configuration. The dashboard locates the repository and data independently of the working directory.
+
+## Development workflow
+
+Develop and test backend changes on a working branch, keep this root README
+up to date, and open a pull request for review. This is the shared setup and
+operation guide for the backend; detailed topic documentation lives in
+`backend/docs/`. The API and evaluation dashboard run as separate services.
+
+## Data modules
+
+`backend/data/` groups download, CSV loading, preprocessing and setup orchestration.
+The loader reads raw or processed CSV files and returns `ticket_id`, `text`, and
+`label`; it does not download data. Runtime datasets remain under root `data/`.
+
+Ticket review and storage live in `backend/tickets/`. Manual checks live in
+`backend/scripts/`. The API-key environment reader lives in `backend/llms/config.py`;
+keys themselves are never stored in source. `backend/app.py` remains the API entry
+point, and `backend/keyword_classifier.py` contains the keyword baseline and category definitions.
