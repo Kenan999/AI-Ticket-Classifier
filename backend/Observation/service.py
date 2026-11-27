@@ -1,4 +1,4 @@
-"""Local observation receiver. Run with python -m Observation.service."""
+"""Local observation receiver. Run with python -m backend.Observation.service."""
 import json
 import sqlite3
 import uuid
@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, abort, jsonify, request
-from Observation.database import DEFAULT_CONFIG, initialize_database
+from backend.Observation.database import DEFAULT_CONFIG, initialize_database
 
 
 def clean(value):

@@ -25,7 +25,7 @@ weitergegeben.
 Manueller Aufruf aus dem Projektverzeichnis:
 
 ```sh
-python -m Observation.database
+python -m backend.Observation.database
 ```
 
 Der Standardpfad liegt unter dem bereits Git-ignorierten Ordner `results/`.
@@ -33,7 +33,7 @@ Nur der separat gestartete Observation-Dienst initialisiert seine Datenbank und 
 
 ## Lokaler Dienst
 
-Start: `python -m Observation.service`. Host und Port stehen in der Config (Standard: 127.0.0.1:8510). Der Dienst erstellt seine Tabelle beim Start.
+Start: `python -m backend.Observation.service`. Host und Port stehen in der Config (Standard: 127.0.0.1:8510). Der Dienst erstellt seine Tabelle beim Start.
 
 - `GET /health`: Erreichbarkeit und Datenbank prüfen.
 - `POST /observations`: JSON mit `source` (application/evaluation), `provider`, `model`, `request` (Objekt). Liefert eine Kennung.
@@ -45,7 +45,7 @@ Backend und Evaluation senden noch keine Anfragen an diesen Dienst. Er startet s
 
 ## Eigenständiges Dashboard
 
-Start: `python -m streamlit run Observation/dashboard.py --server.address 127.0.0.1 --server.port 8511`
+Start: `python -m streamlit run backend/Observation/dashboard.py --server.address 127.0.0.1 --server.port 8511`
 
 Liest SQLite ausschließlich lesend. Zeigt die neuesten 200 Anfragen je Quelle, mit Anbieterfilter und aufklappbarer Anfrage, Antwort oder Fehlermeldung. Aktualisierung erfolgt über den Button. Ohne angebundene Aufrufer bleibt die Ansicht leer. Das Evaluation-Dashboard wird nicht verändert.
 
