@@ -1,7 +1,5 @@
 """Standalone, read-only Streamlit observation dashboard."""
 import json
-import base64
-import html
 import sqlite3
 from contextlib import closing, contextmanager
 from datetime import datetime, timezone
@@ -9,10 +7,6 @@ from pathlib import Path
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[2]
-import sys
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-from backend.observation.metrics import request_metrics, safe_response_headers
 
 
 def observation_config(models=None):
@@ -23,7 +17,7 @@ def observation_config(models=None):
         import sys
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
-        from backend.llms.registry import model_configuration
+        from backend.llms.config import model_configuration
         models = model_configuration(test_environment())
     config["llms"] = [dict(item) for item in models["llms"]]
     return config
@@ -47,83 +41,35 @@ def load_rows(path, source):
         return [dict(row) for row in db.execute(query, params)]
 
 
-def group_kind(rows):
-    """Chat session requests are conversations, not processing loops."""
-    if rows and all(row.get("source") == "chat" for row in rows):
-        return "conversation" if len(rows) > 1 else "single"
-    return "loop" if len(rows) > 1 else "single"
-
-
 def loop_marker(rows):
-    """Static speech-bubble icon for multi-turn chat; original glyph for loops."""
-    kind = group_kind(rows)
-    if kind == "conversation":
-        path = ('<path d="M5 4h14a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H9l-6 3V7a3 3 0 0 1 3-3z" '
-                'fill="none" stroke="#9aa9e8" stroke-width="1.7" stroke-linejoin="round"/>'
-                '<circle cx="9" cy="12" r="1.15" fill="#9aa9e8"/>'
-                '<circle cx="13" cy="12" r="1.15" fill="#9aa9e8"/>'
-                '<circle cx="17" cy="12" r="1.15" fill="#9aa9e8"/>')
-        alt = "conversation-static"
-    elif kind == "loop":
-        path = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" fill="#8b95a5"/>'
-        alt = "loop-animated"
-    else:
-        path = ""
-        alt = "loop-slot"
+    import base64
+    path = '<path d="M7 7h10v3l4-4-4-4v3H5v6h2zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2z" fill="#8b95a5"/>' if is_loop(rows) else ""
     svg = f'<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">{path}</svg>'
-    return f"![{alt}](data:image/svg+xml;base64,{base64.b64encode(svg.encode()).decode()})"
-
-
-def display_model(provider, model):
-    if provider == "local" and "Qwen3-4B" in str(model):
-        return "Qwen3-4B (4-bit)"
-    return str(model)
+    data = base64.b64encode(svg.encode()).decode()
+    alt = "loop-animated" if is_loop(rows) else "loop-slot"
+    return f"![{alt}](data:image/svg+xml;base64,{data})"
 
 
 def provider_logos(rows):
-    """Model labels with the existing provider logos and a local Qwen icon."""
-    parts = []
+    import base64
+    logos = []
     for provider, model in sorted({(row["provider"], row["model"]) for row in rows}):
-        if provider not in {"openai", "gemini", "local"}:
+        if provider not in {"openai", "gemini"}:
             continue
-        logo = "qwen" if provider == "local" else provider
-        path = Path(__file__).with_name("assets") / (logo + ".svg")
+        path = Path(__file__).with_name("assets") / (provider + ".svg")
         if path.is_file():
-            data = base64.b64encode(path.read_bytes()).decode("ascii")
-            image = f'<img src="data:image/svg+xml;base64,{data}" alt="{html.escape(logo)}" style="width:22px;height:22px;object-fit:contain;flex:none">'
-        else:
-            image = ""
-        parts.append(f'<span style="display:inline-flex;align-items:center;gap:9px;min-width:0">{image}<span style="overflow-wrap:anywhere">{html.escape(display_model(provider, model))}</span></span>')
-    return "<span style='display:flex;flex-wrap:wrap;gap:12px'>" + "".join(parts) + "</span>"
-
-
-def provider_logos_markdown(rows):
-    """Streamlit expander labels require Markdown images, not raw HTML."""
-    parts = []
-    for provider, model in sorted({(row["provider"], row["model"]) for row in rows}):
-        logo = "qwen" if provider == "local" and "Qwen" in model else provider
-        path = Path(__file__).with_name("assets") / (logo + ".svg")
-        icon = ""
-        if path.is_file():
-            icon = f"![{logo}](data:image/svg+xml;base64,{base64.b64encode(path.read_bytes()).decode()}) "
-        parts.append(icon + f"`{display_model(provider, model).replace(chr(96), '')}`")
-    return " ".join(parts)
-
-
-def effective_cost(row):
-    if row["provider"] == "local" and "Qwen3-4B" in str(row["model"]):
-        return 0.0
-    return stored_metrics(row).get("estimated_standard_cost_usd")
+            encoded = base64.b64encode(path.read_bytes()).decode()
+            safe_model = str(model).replace("`", "")
+            logos.append(f"![{provider}](data:image/svg+xml;base64,{encoded}) `{safe_model}`")
+    return "　".join(logos)
 
 
 def run_cost(rows):
-    costs = [effective_cost(row) for row in rows]
+    costs = [stored_metrics(row).get("estimated_standard_cost_usd") for row in rows]
     known = [cost for cost in costs if isinstance(cost, (int, float)) and not isinstance(cost, bool)]
     if not known:
         return "Kosten: unbekannt"
     suffix = " (unvollständig)" if len(known) != len(costs) else ""
-    if all(row["provider"] == "local" and "Qwen3-4B" in str(row["model"]) for row in rows):
-        return "$0.00 API-Kosten"
     return f"≈ ${sum(known):.6f}{suffix}"
 
 
@@ -140,14 +86,22 @@ def run_duration(rows):
 
 
 def is_loop(rows):
-    """Identify actual request loops, not tickets inside one batch."""
-    return group_kind(rows) == "loop"
+    if len(rows) > 1:
+        return True
+    for row in rows:
+        try:
+            request = json.loads(row["request_json"])
+            if isinstance(request, dict) and request.get("_observation", {}).get("run_kind") == "loop":
+                return True
+        except (ValueError, TypeError, AttributeError):
+            pass
+    return False
 
 
 @contextmanager
 def status_expander(label, rows, key):
     state = "error" if any(r["error_json"] is not None for r in rows) else "success"
-    kind = group_kind(rows)
+    kind = "loop" if is_loop(rows) else "single"
     with st.container(key=f"obs-{state}-{kind}-{key}"):
         with st.expander(label):
             yield
@@ -223,6 +177,35 @@ def provider_error_details(exc, secrets=()):
         return value
     return redact(details)
 
+
+
+def safe_response_headers(headers):
+    allowed = {"x-request-id", "request-id", "retry-after", "openai-processing-ms"}
+    return {k.lower(): v for k, v in (headers.items() if headers else [])
+            if k.lower() in allowed or k.lower().startswith("x-ratelimit-")}
+
+
+def request_metrics(provider, model, response, elapsed, transport, config):
+    usage = response.get("usage", {}) if provider == "openai" else response.get("usageMetadata", {})
+    inp = usage.get("prompt_tokens" if provider == "openai" else "promptTokenCount")
+    out = usage.get("completion_tokens" if provider == "openai" else "candidatesTokenCount")
+    cached = usage.get("prompt_tokens_details", {}).get("cached_tokens", 0) if provider == "openai" else usage.get("cachedContentTokenCount", 0)
+    reasoning = usage.get("completion_tokens_details", {}).get("reasoning_tokens", 0) if provider == "openai" else usage.get("thoughtsTokenCount", 0)
+    billed_output = out + reasoning if provider == "gemini" and out is not None else out
+    rates = config.get("pricing", {}).get(model)
+    cost = None
+    if rates and inp is not None and billed_output is not None:
+        cost = (max(0, inp-cached)*rates["input"] + cached*rates["cached_input"] + billed_output*rates["output"])/1_000_000
+    return {**transport, "provider": provider, "requested_model": model,
+            "returned_model": response.get("model", response.get("modelVersion")),
+            "response_id": response.get("id", response.get("responseId")),
+            "duration_seconds": round(elapsed, 4), "attempts": 1, "retries": 0,
+            "input_tokens": inp, "output_tokens": out, "cached_input_tokens": cached,
+            "reasoning_tokens": reasoning, "total_tokens": usage.get("total_tokens", usage.get("totalTokenCount")),
+            "estimated_standard_cost_usd": cost, "pricing_snapshot": rates,
+            "cost_note": "Schätzung zum Standardtarif, keine Rechnung; Free Tier, Rabatte und Sonderkosten nicht berücksichtigt. Unbekannte Werte bleiben leer.",
+            "finish_reasons": [c.get("finish_reason", c.get("finishReason")) for c in response.get("choices", response.get("candidates", []))],
+            "usage_raw": usage}
 
 
 def stored_metrics(row):
@@ -441,7 +424,7 @@ def model_overview():
 
 
 def render():
-    st.set_page_config(page_title="Observation", page_icon="🔎", layout="wide", initial_sidebar_state="collapsed")
+    st.set_page_config(page_title="Observation", page_icon="🔎", layout="wide")
     st.html("""<style>
     .stMainBlockContainer {padding-bottom: 1rem;}
     [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"]
@@ -481,23 +464,27 @@ def render():
     [data-testid="stExpander"] summary img[alt="openai"] {
         filter: drop-shadow(0 0 1px #ffffff);
     }
-    /* Each run uses the same fixed column starts, independent of text length.
-       The expander itself remains full width for request/response details. */
-    [class*="st-key-obs-success-"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p:has(img[alt^="loop-"]),
-    [class*="st-key-obs-error-"] [data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p:has(img[alt^="loop-"]) {
+    .obs-table-header,
+    [data-testid="stExpander"] summary p:has(img[alt^="loop-"]) {
         display: grid;
-        grid-template-columns: 1.5rem 12.5rem 1.6rem 7rem 1.6rem minmax(13rem, 1fr) 10rem;
-        column-gap: 1.25rem;
+        grid-template-columns: 1.5rem 17rem 1.5rem 6rem 1.5rem 11rem 10rem;
+        column-gap: 1rem;
         align-items: center;
-        min-width: 57rem;
-        white-space: nowrap;
+        width: 100%;
     }
-    [data-testid="stExpander"] summary:has(img[alt^="loop-"]) { overflow-x: auto; }
+    .obs-table-header {
+        padding: 0.5rem 1rem 0.5rem 2.3rem;
+        font-weight: 600;
+        color: var(--text-color);
+        opacity: 0.75;
+    }
     [data-testid="stExpander"] summary p:has(img[alt^="loop-"]) code {
         background: transparent; color: inherit; padding: 0;
         font-family: inherit; font-size: inherit;
         font-variant-numeric: tabular-nums;
-        white-space: nowrap;
+    }
+    [data-testid="stExpander"] summary:has(img[alt^="loop-"]) {
+        overflow-x: auto;
     }
     .st-key-obs-provider-filter img[alt="openai"],
     [class*="st-key-obs-model-option-"] img[alt="openai"] {
@@ -547,8 +534,8 @@ def render():
         st.session_state["observation_test_open"] = True
     if st.session_state.get("observation_test_open"):
         test_dialog()
-    source = source_column.selectbox("Quelle", ["Alle", "application", "chat", "evaluation"], label_visibility="collapsed",
-                          format_func=lambda value: {"Alle": "Alle Quellen", "application": "Ticketanfragen", "chat": "Chat",
+    source = source_column.selectbox("Quelle", ["Alle", "application", "evaluation"], label_visibility="collapsed",
+                          format_func=lambda value: {"Alle": "Alle Quellen", "application": "Ticketanfragen",
                                                       "evaluation": "Evaluationen"}[value])
     refresh_column.button("Aktualisieren", width="stretch")
     view = view_column.radio("Ansicht", ["Anfragen", "Modelle & Limits"], horizontal=True, label_visibility="collapsed")
@@ -565,28 +552,19 @@ def render():
         st.error("Observation-Datenbank nicht lesbar oder noch nicht initialisiert.")
         return
     if not rows:
-        st.info("Noch keine Anfragen gespeichert. Neue LLM-Anfragen erscheinen hier, wenn die Aufzeichnung aktiviert ist.")
+        st.info("Noch keine Anfragen gespeichert. Backend und Evaluation sind noch nicht an Observation angebunden.")
         return
-    # Only offer currently configured models. Historical observations remain intact.
-    from backend.llms.registry import model_configuration
-    from backend.evaluation.evaluate import load_env
-    current_models = {(item["id"], item["model"])
-                      for item in model_configuration(load_env())["llms"]}
-    model_options = sorted({(r["provider"], r["model"]) for r in rows}
-                           & current_models)
+    model_options = sorted({(r["provider"], r["model"]) for r in rows})
     selected = st.session_state.get("obs_model_filter")
     if selected not in model_options:
         selected = None
-    def model_option_label(option):
-        provider, model = option
-        return f"{provider.title()} · {display_model(provider, model)}"
-    current_label = "Alle Modelle" if selected is None else model_option_label(selected)
+    current_label = "Alle Modelle" if selected is None else provider_logos([{"provider": selected[0], "model": selected[1]}]) or selected[1]
     with provider_column.popover(current_label, width="stretch"):
         if st.button("Alle Modelle", key="obs-model-all", width="stretch"):
             st.session_state["obs_model_filter"] = None
             st.rerun()
         for index, option in enumerate(model_options):
-            label = model_option_label(option)
+            label = provider_logos([{"provider": option[0], "model": option[1]}]) or option[1]
             if st.button(label, key=f"obs-model-option-{index}", width="stretch",
                          type="primary" if option == selected else "secondary"):
                 st.session_state["obs_model_filter"] = option
@@ -597,54 +575,29 @@ def render():
     for row in rows:
         key = row.get("run_id") or row["id"]
         groups.setdefault(key, []).append(row)
-    # Render only a small first page. Hundreds of nested Streamlit expanders
-    # substantially delay the initial page and navigation transition.
-    available_runs = len(groups)
-    page_size = 20
-    page_count = max(1, (available_runs + page_size - 1) // page_size)
-    # Centered pagination, rather than an unlabeled numeric stepper.
-    if "observation_page" not in st.session_state:
-        st.session_state["observation_page"] = 1
-    if st.session_state["observation_page"] > page_count:
-        st.session_state["observation_page"] = page_count
-    if page_count > 1:
-        _, previous_col, page_col, next_col, _ = st.columns([3, 1.5, 2.3, 1.5, 3], vertical_alignment="center")
-        page = st.session_state["observation_page"]
-        if previous_col.button("← Zurück", key="obs-prev-page", disabled=page == 1, width="stretch"):
-            st.session_state["observation_page"] = page - 1
-            st.rerun()
-        page_col.selectbox("Seite", range(1, page_count + 1),
-                           format_func=lambda value: f"Seite {value} von {page_count}",
-                           key="observation_page", label_visibility="collapsed")
-        page = st.session_state["observation_page"]
-        if next_col.button("Weiter →", key="obs-next-page", disabled=page == page_count, width="stretch"):
-            st.session_state["observation_page"] = page + 1
-            st.rerun()
-    else:
-        page = 1
-    groups = dict(list(groups.items())[(page - 1) * page_size:page * page_size])
+    groups = dict(list(groups.items())[:200])
     rows = [row for group in groups.values() for row in group]
     pending = sum(not r["completed_at"] for r in rows)
     failed = sum(r["error_json"] is not None for r in rows)
-    st.caption(f"{available_runs} Läufe insgesamt · Seite {page}/{page_count} · {len(rows)} Anfragen auf dieser Seite · {pending} ausstehend · {failed} Fehler")
-    st.caption("Zeitstempel　 ·　 Dauer　 ·　 Modellname　 ·　 Kosten")
+    st.caption(f"{len(groups)} Läufe · {len(rows)} Anfragen · {pending} ausstehend · {failed} Fehler · Neueste 200 Läufe")
+    st.html('<div class="obs-table-header"><span></span><span>Zeitstempel</span><span></span><span>Dauer</span><span></span><span>Modellname</span><span>Kosten</span></div>')
     for run_id, requests in groups.items():
         try:
-            timestamp = datetime.fromisoformat(requests[0]["created_at"]).astimezone().strftime("%d.%m.%Y %H:%M:%S")
+            timestamp = datetime.fromisoformat(requests[0]["created_at"]).astimezone().strftime("%d.%m.%Y\u2003\u2003\u2003%H:%M:%S")
         except (ValueError, TypeError):
             timestamp = str(requests[0]["created_at"])
-        label = (f"{status_icon(requests)} `{timestamp}` " + loop_marker(requests)
-                 + f" `{run_duration(requests)}` " + provider_logos_markdown(requests)
-                 + f" `{run_cost(requests)}`")
+        label = f"{status_icon(requests)} `{timestamp}` " + loop_marker(requests)
+        label += f" `{run_duration(requests)}` " + provider_logos(requests)
+        label += f" `{run_cost(requests)}`"
         with status_expander(label, requests, run_id):
             st.caption(f"Lauf-Kennung: {run_id}")
-            costs = [effective_cost(r) for r in requests]
+            costs = [stored_metrics(r).get("estimated_standard_cost_usd") for r in requests]
             known = [cost for cost in costs if cost is not None]
             st.caption(f"Geschätzte Standardkosten: ${sum(known):.8f} · {len(known)}/{len(costs)} Anfragen mit Kostendaten" if known else "Kosten dieses Laufs unbekannt")
             _, content = st.columns([1, 30])
             with content:
                 for number, row in enumerate(requests, 1):
-                    with status_expander(f"{status_icon([row])} {number}. {row['provider']} · {display_model(row['provider'], row['model'])}\u2003\u2003{run_duration([row])}\u2003\u2003{run_cost([row])}", [row], row["id"] + "-request"):
+                    with status_expander(f"{status_icon([row])} {number}. {row['provider']} · {row['model']}\u2003\u2003{run_duration([row])}\u2003\u2003{run_cost([row])}", [row], row["id"] + "-request"):
                         st.caption(f"Quelle: {row['source']} · Kennung: {row['id']} · Start: {row['created_at']}")
                         if row["completed_at"]:
                             try:
@@ -661,6 +614,7 @@ def render():
                                     st.json(json.loads(row[field]))
                                 except (TypeError, ValueError):
                                     st.text(row[field])
+
 
 if __name__ == "__main__":
     render()

@@ -4,19 +4,17 @@ import re
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from backend.tickets.categories import CATEGORY_GUIDANCE, PredictionResult
-from ..gemini import configured_categories
-from ..retry import LLMError, read_provider_response
-from backend.observation.tracing import observed_call
-from ..prompts import DEFAULT_PROMPT_VERSION, render_prompt
+from backend.keyword_classifier import CATEGORY_GUIDANCE, PredictionResult
+from .gemini import configured_categories
+from .retry import LLMError, read_provider_response
+from .prompts import DEFAULT_PROMPT_VERSION, render_prompt
 
-from .config import configured_model
+from .config import default_model
 
-DEFAULT_OPENAI_MODEL = configured_model()
+DEFAULT_OPENAI_MODEL = default_model("openai")
 MAX_RESPONSE_BYTES = 32 * 1024
 
 
-@observed_call
 def classify_with_openai(text, *, api_key, categories, model=DEFAULT_OPENAI_MODEL,
                          timeout=8.0, opener=None, prompt_version=DEFAULT_PROMPT_VERSION, retry_budget=None):
     if not api_key or not api_key.strip():

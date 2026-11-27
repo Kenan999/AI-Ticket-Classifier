@@ -1,7 +1,7 @@
 {
   "database": {
     "type": "sqlite",
-    "path": "/Users/kenanali/Documents/GitHub/AI-Ticket-Classifier/results/observation/observation.sqlite3"
+    "path": "results/observation/observation.sqlite3"
   },
   "service": {
     "host": "127.0.0.1",
@@ -49,15 +49,5 @@
       "source": "https://aistudio.google.com/docs/models/gemini-3.5-flash-lite",
       "checked": "2026-11-17"
     }
-  },
-  "recording": {
-    "enabled": true,
-    "sources": [
-      "application",
-      "chat",
-      "evaluation"
-    ],
-    "sqlite_timeout_seconds": 0.05,
-    "max_content_bytes": 65536
   }
 }

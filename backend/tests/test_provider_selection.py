@@ -8,9 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from backend.app import create_app
-from backend.tickets.categories import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
+from backend.keyword_classifier import CATEGORY_GUIDANCE, DATASET_CATEGORIES, PredictionResult
 from backend.llms.gemini import LLMError
-from backend.llms.prompts import GUIDANCE_BY_VERSION
 from backend.evaluation import evaluate
 
 
@@ -181,6 +180,11 @@ class VersionedEvaluationTests(unittest.TestCase):
                     ), patch(urlopen, return_value=io.BytesIO(json.dumps(payload).encode())) as send:
                         rows = evaluate.run_evaluation([ticket], provider=f"{provider}-{version.lower()}")
 
+                    if version in ("V2", "V3"):
+                        send.assert_not_called()
+                        self.assertIn("not configured", rows[0]["error"])
+                        self.assertFalse(rows[0]["correct"])
+                        continue
                     send.assert_called_once()
                     request = json.loads(send.call_args.args[0].data)
                     if provider == "gemini":
@@ -188,7 +192,7 @@ class VersionedEvaluationTests(unittest.TestCase):
                     else:
                         instructions = request["messages"][0]["content"]
                     self.assertIn(json.dumps(DATASET_CATEGORIES), instructions)
-                    self.assertEqual(instructions.count(GUIDANCE_BY_VERSION.get(version, CATEGORY_GUIDANCE)), 1)
+                    self.assertEqual(instructions.count(CATEGORY_GUIDANCE), 1)
                     self.assertEqual(rows[0]["prompt_version"], version)
                     self.assertEqual(rows[0]["predicted"], category)
                     self.assertTrue(rows[0]["correct"])

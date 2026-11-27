@@ -11,12 +11,6 @@
       "provider": "OpenAI",
       "default_model": "gpt-4.1-mini",
       "model_environment_variable": "OPENAI_MODEL"
-    },
-    {
-      "id": "local",
-      "provider": "Local",
-      "default_model": "mlx-community/Qwen3-4B-Instruct-2507-4bit",
-      "model_environment_variable": "LOCAL_LLM_MODEL"
     }
   ]
 }
