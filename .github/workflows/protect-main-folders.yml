@@ -1,0 +1,56 @@
+name: Protect main repository structure
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-main-layout:
+    name: Protect main folders
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted main branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+
+      - name: Check proposed merge without executing PR code
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SOURCE_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/pull/${PR_NUMBER}/head:refs/remotes/origin/guard-pr-${PR_NUMBER}"
+          head_ref="refs/remotes/origin/guard-pr-${PR_NUMBER}"
+          merge_tree="$(git merge-tree --write-tree "$BASE_SHA" "$head_ref")"
+
+          if ! git cat-file -e "${merge_tree}:frontend/index.html" 2>/dev/null; then
+            echo "::error::The proposed merge removes frontend/index.html or the frontend folder."
+            exit 1
+          fi
+          if ! git cat-file -e "${merge_tree}:backend/app.py" 2>/dev/null; then
+            echo "::error::The proposed merge removes backend/app.py or the backend folder."
+            exit 1
+          fi
+
+          if [[ "$SOURCE_BRANCH" == "Frontend" ]]; then
+            if git diff --name-only "$BASE_SHA" "$merge_tree" -- backend/ | grep -q .; then
+              echo "::error::A PR from Frontend must not modify or delete backend files."
+              exit 1
+            fi
+          elif [[ "$SOURCE_BRANCH" == "Backend" ]]; then
+            if git diff --name-only "$BASE_SHA" "$merge_tree" -- frontend/ | grep -q .; then
+              echo "::error::A PR from Backend must not modify or delete frontend files."
+              exit 1
+            fi
+          fi
+
+          echo "Proposed main tree retains both application folders and respects branch ownership."
