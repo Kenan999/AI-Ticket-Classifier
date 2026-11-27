@@ -12,7 +12,8 @@ Raw column  -> Project column
 -----------------------------
 (row number) -> ticket_id   e.g. "BT-00001" (the raw file has no ID of its own)
 instruction  -> text        the customer message
-category     -> label       one of 11 ticket categories
+category     -> label       one of the ticket categories (11 in the raw file,
+                            9 in the split files: CANCEL and SUBSCRIPTION are dropped)
 
 All other raw columns (``intent``, ``response``, ``flags``) are not needed for
 classification and are not returned.
@@ -21,8 +22,8 @@ Because ``ticket_id`` is the row number of the original file, any ticket can
 always be traced back to its row in the raw data.
 
 The raw file is not stored in Git (see ``download_data.py`` for why). Download
-it with ``python backend/download_data.py``, as described in
-``backend/README.md`` ("Data" section). It is saved to ``data/raw/``.
+it with ``python backend/data/download_data.py``, as described in
+``README.md`` ("Data" section). It is saved to ``data/raw/``.
 """
 
 from pathlib import Path
@@ -30,7 +31,7 @@ from pathlib import Path
 import pandas as pd
 
 # Paths are built from this file's location, so the script works from any folder.
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 RAW_FILE = (
     REPO_ROOT
     / "data"
@@ -60,7 +61,7 @@ def load_dataset(path=RAW_FILE):
     if not path.exists():
         raise FileNotFoundError(
             f"Data file not found: {path}\n"
-            "The raw file is downloaded with: python backend/download_data.py "
+            "The raw file is downloaded with: python backend/data/download_data.py "
             "(see backend/README.md, Data section)."
         )
 
