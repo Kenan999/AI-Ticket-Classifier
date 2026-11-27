@@ -19,3 +19,7 @@ results/
 
 # Downloaded local frontend starter (keep outside Git)
 /developer_client.py
+
+# Track data-processing source modules; runtime datasets remain ignored.
+!backend/data/
+!backend/data/*.py
