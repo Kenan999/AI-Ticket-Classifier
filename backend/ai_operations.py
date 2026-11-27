@@ -9,37 +9,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 st.set_page_config(page_title="AI Operations", layout="wide")
-# Anchor only the navigation to the viewport. The native header and sidebar
-# keep their original layout, full height, collapse control, and resize behavior.
-# Use semantic hooks instead of generated Streamlit class names.
-st.html("""<style>
-@media screen {
-    [data-testid="stTopNav"] {
-        position: fixed;
-        top: 1.875rem;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        /* A definite width prevents overflow measurement from shrinking to "2 more". */
-        width: 35rem;
-        justify-content: center;
-        max-width: calc(100% - 8rem);
-        margin: 0;
-    }
-    [data-testid="stToolbar"] > div > div:last-child {
-        margin-left: auto;
-    }
-}
-</style>""")
-
 page = st.navigation(
     [
         st.Page("evaluation/dashboard.py", title="Evaluation", default=True),
-        st.Page("observation/dashboard.py", title="Observation", url_path="observation"),
-        st.Page("llm_configuration.py", title="LLM Configuration", url_path="llm-configuration"),
+        st.Page("Observation/dashboard.py", title="Observation", url_path="observation"),
     ],
     position="top",
 )
-from backend.observation.integration import install_evaluation
-
-install_evaluation()
 page.run()

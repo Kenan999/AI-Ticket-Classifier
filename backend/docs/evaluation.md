@@ -11,7 +11,7 @@ The evaluation lives in `backend/evaluation/` and only ever *reads* the backend:
 - `dashboard.py` — Streamlit view of the results
 
 It imports `predict_ticket` and `dataset_label_for` from
-`backend/tickets/categories.py`, `load_dataset` from `backend/data/data_loader.py` and
+`backend/keyword_classifier.py`, `load_dataset` from `backend/data/data_loader.py` and
 `classify_with_gemini` from `backend/llms/gemini.py`. No backend file is
 modified, no Flask app is started and no SQLite database is touched. The
 dataset CSVs are read only — the sampling happens in memory, so no extra
@@ -27,7 +27,7 @@ reads them.
 ### Ground truth
 
 The dataset and classifier use the same nine labels. The evaluation reads
-them through `dataset_label_for` in `backend/tickets/categories.py`. A historical or
+them through `dataset_label_for` in `backend/keyword_classifier.py`. A historical or
 invalid prediction without an exact dataset label counts as wrong. Macro-F1
 averages over the labels in the ground truth.
 
@@ -137,66 +137,10 @@ Two notes for whoever works on it next:
 `backend/llms/prompts.py` is the shared source for both adapters. V1 is the
 backend default. V2 and V3 initially use the same wording as V1, so they only
 become distinct experiments after you edit their templates. The configured
-nine-label list and shared category guidance from `backend/tickets/categories.py`
+nine-label list and shared category guidance from `backend/keyword_classifier.py`
 are inserted when the prompt is rendered. The dashboard shows metrics after
 a run produces a result CSV.
 
 ## Open points
 
 - Define distinct V2 and V3 experiments and measure them on the validation split.
-
-
-## Proposed persistent background evaluation jobs (design only)
-
-## Goal
-An Evaluation job must survive Streamlit reruns, browser refreshes and browser closure. A user can request cancellation; Observation must distinguish `manually_stopped` from success, failure and unexpected interruption.
-
-## Architecture
-- **Streamlit UI**: submits a job, reads durable status and requests cancellation. It never owns the evaluation loop.
-- **Job registry**: SQLite (`results/evaluation/jobs.sqlite3`) with WAL, busy timeout, atomic transactions and a unique `job_id`.
-- **Worker**: independent local subprocess, launched with the current Python environment and a job ID. Worker reads immutable job parameters and writes progress and result checkpoints. Streamlit restart does not kill the worker.
-- **Observation**: each model request retains a shared `run_id = job_id`; an explicit job-level lifecycle record tracks completion or cancellation. Request-level failures are not misrepresented as user cancellation.
-
-## Job state machine
-`queued -> running -> completed | failed | manually_stopped | interrupted`
-
-`running -> stop_requested -> manually_stopped` after the current in-flight model call reaches a safe cancellation boundary. If the worker crashes after stop request, classify as interrupted unless the worker confirms stop. `stop_requested` must not be displayed as already stopped.
-
-## Durable schema
-`jobs(job_id PK, provider, mode, batch, prompt_version, status, created_at, started_at, updated_at, finished_at, worker_pid, completed_tickets, total_tickets, request_count, error_count, stop_requested_at, stop_confirmed_at, error_type, result_path, partial_path, config_snapshot_json)`.
-
-Store only allowlisted configuration, never API keys, ticket text, or credentials. Use separate `job_events(job_id, sequence, timestamp, event_type, payload_json)` for an auditable state history. Add indexes on status and created_at.
-
-## Worker protocol
-1. UI validates dataset/provider, inserts a `queued` job and launches worker; enforce a single active job per selected configuration or an explicit concurrency limit.
-2. Worker claims the job atomically, marks `running`, and loads the dataset and model settings snapshot.
-3. Worker records progress/checkpoints after each ticket or completed batch, with atomic file replacement. Every request uses `job_id` for Observation grouping.
-4. Before each new request/batch, worker checks `stop_requested_at`. On stop: flush checkpoint, mark `manually_stopped`, record time and completed/request counts, annotate Observation run.
-5. On success: persist final CSV and mark `completed` only after file integrity checks. On failure: mark `failed` with sanitized error type.
-6. On startup/status polling, detect stale workers by PID plus heartbeat; mark `interrupted` after a grace period. Never silently rerun jobs or duplicate provider calls.
-
-## Refresh / Stop UI
-- Reopen Evaluation: query latest active job and display status, progress, elapsed time, completed tickets and a **Stop evaluation** button.
-- Stop action: atomic update to `stop_requested`; show **Stopping…** until worker acknowledges. Repeated stop clicks are idempotent.
-- Poll state using Streamlit fragment auto-refresh or explicit refresh, without starting duplicate jobs.
-- Completed/interrupted/failed/stopped jobs remain inspectable after refresh.
-
-## Observation semantics
-- Requests grouped by the same `job_id` represent one evaluation run; a loop icon appears only when there are multiple actual provider requests.
-- Job-level `manually_stopped` event is explicit, including `stop_requested_at`, `stop_confirmed_at`, `completed_tickets` and `request_count`.
-- Preserve already completed request records and partial results. A batch of many tickets in one HTTP request is **not** itself a loop.
-
-## Safety / testing gates
-- No provider calls in unit tests: mock workers and model transports.
-- Test browser refresh during running job, Streamlit process restart, browser closure, stop during a slow call, repeated Stop, crash recovery, SQLite contention, and concurrent Start clicks.
-- Confirm Observation records share job ID and distinguish manual stop from timeout or process crash.
-- Test baseline, OpenAI/Gemini and local Qwen (single and batch) before replacing the current synchronous UI path.
-
-## Implementation sequence
-1. Job schema and state transitions with tests.
-2. Worker CLI and atomic progress/checkpoint persistence.
-3. Observation lifecycle integration and cancellation semantics.
-4. Streamlit start/status/stop UI and refresh recovery.
-5. Integration tests, then controlled cutover.
-
-**Status:** design only; no background job implementation or migration has been performed.

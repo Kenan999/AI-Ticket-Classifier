@@ -30,6 +30,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from backend.evaluation.evaluate import (  # noqa: E402
+    BASELINE,
     GEMINI,
     MODES,
     PROVIDERS,
@@ -66,6 +67,18 @@ TARGET_MACRO_F1 = 0.85
 # Die Tabelle zeigt nur gemessene Kennzahlen. Versionierte Methoden
 # werden aus derselben Liste wie die Auswahl in der Seitenleiste erzeugt.
 VERSIONS = [
+    {
+        "key": "V0",
+        "short": "V0 · Regeln",
+        "provider": BASELINE,
+        "tint": "#eaf2fc",
+        "ink": "#1b5fae",
+        "approach": "Regeln, kein LLM",
+        "prompt": (
+            "Kein Prompt. Gezählte Stichwörter mit festen Punktwerten "
+            "in backend/keyword_classifier.py."
+        ),
+    },
     *(
         {
             "key": key,
@@ -77,14 +90,14 @@ VERSIONS = [
             "prompt": "Prompt-Text in backend/llms/prompts.py.",
         }
         for key, method in PROVIDERS.items()
-        if key != GEMINI and "provider" in method
+        if key not in {BASELINE, GEMINI}
     ),
 ]
 
 def configured_versions():
-    from backend.llms.registry import model_configuration
+    from backend.llms.config import model_configuration
     from backend.evaluation.evaluate import load_env
-    versions = []
+    versions = [VERSIONS[0]]
     for item in model_configuration(load_env())["llms"]:
         for prompt in ("V1", "V2", "V3"):
             key = item["id"] + "-" + prompt.lower()
@@ -244,9 +257,11 @@ def mode_caption(mode):
 
 def missing_prompt_message(provider):
     from backend.llms.prompts import PROMPTS
+    if provider == BASELINE:
+        return None
     method = PROVIDERS[provider]
     version = method["prompt_version"]
-    template = PROMPTS.get(version, "")
+    template = PROMPTS.get(version, {}).get(method["provider"], "")
     if template.strip():
         return None
     return f"Bitte zuerst den Prompt für {version} in backend/llms/prompts.py eintragen. Danach kann diese Version ausgewertet werden."
@@ -275,26 +290,28 @@ def render_sidebar():
         prompt_controls = st.container()
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         model_env = load_env()
-        from backend.llms.registry import model_configuration
+        from backend.llms.config import model_configuration
         active_models = {item["id"]: item["model"]
                          for item in model_configuration(model_env)["llms"]}
         engine = st.selectbox(
-            "3. Modell / Verfahren", options=list(active_models),
-            format_func=lambda key: active_models[key],
-            help="Gemini und OpenAI benötigen einen API-Key.",
+            "3. Modell / Verfahren", options=[BASELINE, *active_models],
+            format_func=lambda key: "Lokale Regeln (kein LLM)" if key == BASELINE else active_models[key],
+            help="Lokale Regeln brauchen keinen Prompt. Gemini und OpenAI benötigen einen API-Key.",
         )
         with prompt_controls:
             version = st.selectbox(
                 "2. Prompt-Version", options=["V1", "V2", "V3"],
-                disabled=False,
-                help="Versionen ohne konfigurierten Prompt bleiben gesperrt.",
+                disabled=engine == BASELINE,
+                help="V2 und V3 bleiben gesperrt, bis ihre Prompts eingetragen sind.",
             )
-        provider = f"{engine}-{version.lower()}"
-        if True:
+            if engine == BASELINE:
+                st.caption("Nicht erforderlich: Lokale Regeln verwenden keinen Prompt.")
+        provider = BASELINE if engine == BASELINE else f"{engine}-{version.lower()}"
+        if engine != BASELINE:
             st.info(f"Modell für neue Tests: {active_models[engine]}")
         st.checkbox("Tickets gemeinsam senden (Batch)", value=True,
-                    key="batch_evaluation", disabled=False)
-        if st.session_state.get("batch_evaluation", True):
+                    key="batch_evaluation", disabled=engine == BASELINE)
+        if engine != BASELINE and st.session_state.get("batch_evaluation", True):
             st.caption("Batch-Limits: evaluation/config.py. Automatische Gruppengröße nach Textlänge und Token-Budget; kein festes 20-Ticket-Limit. Alte Einzel-Ergebnisse: Batch ausschalten.")
         supported = provider in PROVIDERS
         prompt_missing = (missing_prompt_message(provider) if supported else
@@ -580,12 +597,14 @@ def display_model(value):
     """Remove evaluation metadata from a recorded model identifier for display only."""
     value = str(value or "Unbekannt")
     parts = value.split(":")
-    if len(parts) > 1 and parts[0] in {"gemini", "openai", "local"}:
+    if len(parts) > 1 and parts[0] in {"gemini", "openai"}:
         value = parts[1]
     return value
 
 
 def model_label(provider, results=None):
+    if provider == BASELINE:
+        return "Lokale Regeln (kein LLM)"
     if provider not in PROVIDERS:
         entry = next(v for v in configured_versions() if v["provider"] == provider)
         return entry["short"] + " · nicht unterstützt"
@@ -596,9 +615,7 @@ def model_label(provider, results=None):
     else:
         from backend.evaluation.evaluate import load_env, DEFAULT_MODEL, DEFAULT_OPENAI_MODEL
         engine = method["provider"]
-        from backend.llms.local import DEFAULT_LOCAL_MODEL
-        default = DEFAULT_LOCAL_MODEL if engine == "local" else (DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
-        name = load_env().get("LOCAL_LLM_MODEL" if engine == "local" else engine.upper() + "_MODEL", default)
+        name = load_env().get(engine.upper() + "_MODEL", DEFAULT_MODEL if engine == "gemini" else DEFAULT_OPENAI_MODEL)
 
     return name + " · " + str(method.get("prompt_version", "V1"))
 
@@ -621,7 +638,7 @@ def version_table_html(measured, versions=None):
             if category not in categories:
                 categories.append(category)
     if not categories:
-        from backend.tickets.categories import DATASET_CATEGORIES
+        from backend.keyword_classifier import DATASET_CATEGORIES
         categories = list(DATASET_CATEGORIES)
     categories.sort()
 
@@ -838,19 +855,11 @@ def prompt_texts(version):
     und OpenAI derselbe Text, erscheint er nur einmal. Leere Eintraege
     gelten als noch nicht definiert.
     """
-    from backend.tickets.categories import CATEGORY_GUIDANCE
-    from backend.evaluation.evaluate import load_env
-    from backend.llms.gemini import configured_categories
-    from backend.llms.prompts import PROMPTS, render_prompt
+    from backend.llms.prompts import PROMPTS
 
-    categories = configured_categories(load_env().get("LLM_CATEGORIES", ""))
     found = {}
-    for provider in ("openai", "gemini", "local"):
-        template = PROMPTS.get(version, "")
-        if template.strip():
-            text = render_prompt(
-                version, provider, categories, category_guidance=CATEGORY_GUIDANCE,
-            )
+    for provider, text in PROMPTS.get(version, {}).items():
+        if text.strip():
             found.setdefault(text, []).append(provider)
     return found
 
@@ -1142,5 +1151,4 @@ def render_backlog():
         st.markdown(BACKLOG)
 
 
-if __name__ == "__main__":
-    main()
+main()

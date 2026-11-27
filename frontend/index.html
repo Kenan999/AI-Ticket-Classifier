@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Shoply</title>
-<link rel="stylesheet" href="styles.css?v=20261123-support-scroll-1">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <div class="promo-bar">Free shipping on orders over $50</div>
+
   <header class="site-header">
     <a class="logo" href="#" aria-label="Shoply home">
       <svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true">
@@ -23,10 +25,7 @@
     <div class="screen-wrap">
       <p class="screen-label">Screen 1 · Customer</p>
       <section class="screen screen-customer" aria-labelledby="consumer-title">
-        <div class="customer-header">
-          <h2 id="consumer-title">Contact support</h2>
-        </div>
-        <div id="category-panel" class="customer-tab-panel" hidden>
+        <h2 id="consumer-title">Contact support</h2>
         <p class="hint">Something wrong with your order? Tell us and we'll take a look.</p>
 
         <form id="ticket-form" novalidate>
@@ -53,8 +52,6 @@
             <span id="success-detail" class="success-detail"></span>
           </div>
         </form>
-        </div>
-        <div id="chat-panel" class="customer-tab-panel"><iframe class="chat-clone-frame" src="chat-clone/index.html?v=20261123-main-integration-1" title="Customer support chat" loading="lazy"></iframe></div>
       </section>
     </div>
 
@@ -63,57 +60,15 @@
       <p class="screen-label">Screen 2 · Support team</p>
       <section class="screen screen-staff" aria-labelledby="dashboard-title">
         <div class="staff-head">
-          <h2 id="dashboard-title">Support Center</h2>
+          <h2 id="dashboard-title">Customer Support Dashboard</h2>
           <div class="staff-pills">
             <button type="button" id="reload-button" class="reload-btn">Reload</button>
-            <button type="button" id="staff-settings-tab" class="reload-btn" aria-expanded="false" aria-controls="staff-settings-panel">Settings</button>
             <a id="evaluation-monitoring-link" class="reload-btn evaluation-link"
                target="_blank" rel="noopener" hidden>AI Operations</a>
             <span id="backend-status" class="staff-pill" data-state="checking">Backend: checking…</span>
           </div>
         </div>
 
-
-        <section id="staff-settings-panel" class="staff-settings-panel" hidden>
-          <h3>Ticket classification model</h3>
-          <p id="staff-model-current" role="status">Checking current model…</p>
-          <label for="staff-model-select">Model provider</label>
-          <select id="staff-model-select" disabled></select>
-          <p class="staff-settings-note">Applies to new tickets submitted from this dashboard. Existing tickets are unchanged.</p>
-          <p id="staff-model-error" role="alert" hidden></p>
-          <h3>Human review confidence threshold</h3>
-          <label for="review-threshold-slider">Send classifications below <strong id="review-threshold-value">75%</strong> to Human Review</label>
-          <input id="review-threshold-slider" type="range" min="0" max="100" step="1" value="75" aria-describedby="review-threshold-note" />
-          <p id="review-threshold-note" class="staff-settings-note">Applies to new classifications. Higher values send more uncertain tickets for human review.</p>
-          <p id="review-threshold-status" role="status"></p>
-          <h3>Customer chat agent</h3>
-          <p id="staff-chat-model-current" role="status">Checking chat agent…</p>
-          <label for="staff-chat-model-select">Chat AI provider</label>
-          <select id="staff-chat-model-select" disabled></select>
-          <p class="staff-settings-note">Controls AI replies to customers, independently of ticket classification.</p>
-          <p id="staff-chat-model-error" role="alert" hidden></p>
-          <section class="staff-api-status" aria-labelledby="staff-api-heading"><div class="staff-api-heading"><div><h3 id="staff-api-heading">Model connectivity</h3><p class="staff-settings-note">Live API checks · every 30 seconds</p></div><button type="button" id="staff-api-refresh" class="staff-api-refresh" aria-label="Refresh model connection status" title="Refresh status"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11a8 8 0 1 0-2.2 5.5"/><path d="M20 4v7h-7"/></svg></button></div><div id="staff-api-status-summary" class="staff-api-summary" aria-live="polite">Checking model connections…</div><div id="staff-api-status-list" class="staff-api-status-list" role="list" aria-live="polite"></div><p id="staff-api-checked" class="staff-api-checked"></p></section>
-        </section>
-        <section id="staff-chat-panel" class="staff-live-panel">
-          <h3>Conversations <span id="staff-chat-count" class="count" hidden>0</span></h3>
-          <div id="staff-chat-queue" class="staff-chat-queue">No waiting customers.</div>
-          <div id="staff-chat-conversation" hidden>
-            <h4 id="staff-chat-heading">Customer conversation</h4>
-            <div class="staff-chat-window">
-              <div class="staff-chat-intro"><span class="staff-chat-ai-icon">✦</span> AI Assistant · Conversation history</div>
-              <div id="staff-chat-messages" class="staff-chat-messages" role="log" aria-live="polite"></div>
-            </div>
-            <form id="staff-chat-form" class="staff-chat-form">
-              <textarea id="staff-chat-input" maxlength="2000" rows="2" placeholder="Message the customer…" required aria-label="Employee reply"></textarea>
-              <div class="staff-chat-toolbar"><span id="staff-chat-typing-status">Customer service is replying</span><button type="button" id="staff-chat-end">End chat</button><button type="submit" class="staff-chat-send" aria-label="Send message">↑</button></div>
-            </form>
-          </div>
-        </section>
-        <div id="staff-ticket-sections">
-        <div class="dash-section dash-review">
-          <h3>In Progress <span id="progress-count" class="count">0</span></h3>
-          <ul id="progress-list" class="ticket-list"></ul>
-        </div>
         <div class="dash-section dash-classified">
           <h3>Classified Tickets <span id="classified-count" class="count">0</span></h3>
           <ul id="classified-list" class="ticket-list"></ul>
@@ -123,14 +78,11 @@
           <h3>Human Review <span id="review-count" class="count">0</span></h3>
           <ul id="review-list" class="ticket-list"></ul>
         </div>
-        </div>
       </section>
     </div>
   </main>
 
   <script src="runtime-config.js?v=team-evaluation"></script>
-  <script src="app.js?v=20261123-live-progress-1"></script>
-  <script src="support-dashboard.js?v=20261123-unified-tickets-1"></script>
-  <script src="model-settings.js?v=20261123-connectivity-1"></script>
+  <script src="app.js"></script>
 </body>
 </html>
