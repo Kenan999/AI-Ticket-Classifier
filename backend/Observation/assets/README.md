@@ -1,0 +1,1 @@
+Provider logo SVGs sourced from https://github.com/lobehub/lobe-icons/tree/master/packages/static-svg/icons (gemini-color.svg, openai.svg). Brand trademarks belong to their respective owners. Used to identify the provider of each request.

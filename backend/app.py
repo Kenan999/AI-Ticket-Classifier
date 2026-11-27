@@ -3,31 +3,36 @@
 Run from the repository root:
     python3 backend/app.py
 
-The first-sprint API stores active cases in memory and review feedback in CSV.
+The API stores cases in SQLite and review feedback in CSV.
 It is a local development service, not a public/authenticated deployment.
 """
 
 import os
-import json
-import sqlite3
 from pathlib import Path
 import threading
 import uuid
 
 from flask import Flask, jsonify, request
 
-try:
-    from .classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
-    from .review import ReviewError, save_review
-    from .config import openai_api_key
-    from .openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
-    from .llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
-except ImportError:  # Supports direct execution: python3 backend/app.py
-    from classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
-    from review import ReviewError, save_review
-    from config import openai_api_key
-    from openai_classifier import DEFAULT_OPENAI_MODEL, classify_with_openai
-    from llm_classifier import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
+if __package__ in (None, ""):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from backend.tickets import case_storage
+from backend.keyword_classifier import REVIEW_THRESHOLD, predict_ticket, suggest_customer_reply, dataset_label_for
+from backend.tickets.review import ReviewError, save_review
+from backend.llms.config import openai_api_key
+from backend.llms.openai import DEFAULT_OPENAI_MODEL, classify_with_openai
+from backend.llms.gemini import DEFAULT_MODEL, LLMError, configured_categories, classify_with_gemini
+
+
+PROVIDERS = ("baseline", "openai", "gemini")
+
+
+def default_provider():
+    provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
+    # Preserve the existing baseline behavior for unknown deployment settings.
+    return provider if provider in PROVIDERS else "baseline"
 
 
 def create_app(review_path=None, case_db_path=None):
@@ -41,22 +46,13 @@ def create_app(review_path=None, case_db_path=None):
     case_db.parent.mkdir(parents=True, exist_ok=True)
     lock = threading.RLock()
 
-    def connect_cases():
-        connection = sqlite3.connect(case_db, timeout=15)
-        connection.execute("CREATE TABLE IF NOT EXISTS cases (ticket_id TEXT PRIMARY KEY, payload TEXT NOT NULL)")
-        return connection
-
-    with connect_cases() as connection:
-        pass
+    case_storage.initialize(case_db)
 
     def load_case(ticket_id):
-        with connect_cases() as connection:
-            row = connection.execute("SELECT payload FROM cases WHERE ticket_id=?", (ticket_id,)).fetchone()
-        return json.loads(row[0]) if row else None
+        return case_storage.load(case_db, ticket_id)
 
     def store_case(case):
-        with connect_cases() as connection:
-            connection.execute("INSERT OR REPLACE INTO cases(ticket_id,payload) VALUES (?,?)", (case["ticket_id"], json.dumps(case)))
+        case_storage.store(case_db, case)
 
     origins = {
         origin.strip()
@@ -85,11 +81,29 @@ def create_app(review_path=None, case_db_path=None):
     def health():
         return jsonify({"status": "ok"})
 
+    @app.get("/providers")
+    def providers():
+        # Configuration presence is not a live provider health check.
+        response = jsonify({
+            "default_provider": default_provider(),
+            "providers": [
+                {"id": "baseline", "label": "Local rules", "configured": True},
+                {"id": "openai", "label": "OpenAI", "configured": bool(openai_api_key())},
+                {"id": "gemini", "label": "Gemini",
+                 "configured": bool(os.getenv("GEMINI_API_KEY", "").strip())},
+            ],
+        })
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.post("/classify")
     def classify():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return error("invalid_json", "Send a JSON object with a text field")
+        # Clients choose a provider, never server models, credentials or prompts.
+        if set(data) - {"text", "provider"}:
+            return error("unsupported_fields", "Only text and provider fields are accepted")
         text = data.get("text")
         if not isinstance(text, str) or not text.strip():
             return error("invalid_text", "text must be a non-empty string")
@@ -97,41 +111,39 @@ def create_app(review_path=None, case_db_path=None):
         if len(text) > 4000:
             return error("text_too_long", "text must be at most 4000 characters")
 
-        # Keep the response/SQLite contract stable for the existing frontend.
-        # Remote providers are opt-in; failures retain the local baseline.
-        prediction = predict_ticket(text)
-        provider = os.getenv("LLM_PROVIDER", "baseline").strip().lower()
-        if provider == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY", "")
-            if api_key:
-                try:
-                    prediction = classify_with_gemini(
-                        text,
-                        api_key=api_key,
-                        categories=configured_categories(),
-                        model=os.getenv("GEMINI_MODEL", DEFAULT_MODEL),
-                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
-                    )
-                except (LLMError, ValueError, OverflowError) as exc:
-                    # Only report the failure class: never log ticket text or secrets.
-                    app.logger.warning("Gemini classification unavailable (%s); using baseline", type(exc).__name__)
+        explicit_provider = "provider" in data
+        provider = data.get("provider") if explicit_provider else default_provider()
+        if not isinstance(provider, str) or provider not in PROVIDERS:
+            return error("invalid_provider", "provider must be baseline, openai or gemini")
+
+        # Only this request selects the provider; never mutate process settings.
+        used_provider = "baseline"
+        prediction = None
+        if provider != "baseline":
+            api_key = (openai_api_key() if provider == "openai"
+                       else os.getenv("GEMINI_API_KEY", "").strip())
+            if not api_key:
+                if explicit_provider:
+                    return error("provider_not_configured",
+                                 "Selected provider is not configured on the server", 503)
+                app.logger.warning("%s selected but key missing; using baseline", provider)
             else:
-                app.logger.warning("Gemini selected but GEMINI_API_KEY missing; using baseline")
-        elif provider == "openai":
-            api_key = openai_api_key()
-            if api_key:
                 try:
-                    prediction = classify_with_openai(
-                        text,
-                        api_key=api_key,
-                        categories=configured_categories(),
-                        model=os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL),
-                        timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
+                    adapter = classify_with_openai if provider == "openai" else classify_with_gemini
+                    model = (os.getenv("OPENAI_MODEL", DEFAULT_OPENAI_MODEL)
+                             if provider == "openai" else os.getenv("GEMINI_MODEL", DEFAULT_MODEL))
+                    prediction = adapter(
+                        text, api_key=api_key, categories=configured_categories(),
+                        model=model, timeout=float(os.getenv("LLM_TIMEOUT_SECONDS", "8")),
                     )
+                    used_provider = provider
                 except (LLMError, ValueError, OverflowError) as exc:
-                    app.logger.warning("OpenAI classification unavailable (%s); using baseline", type(exc).__name__)
-            else:
-                app.logger.warning("OpenAI selected but key missing; using baseline")
+                    # Never expose provider responses, ticket text or keys in errors.
+                    app.logger.warning("%s classification unavailable (%s)", provider, type(exc).__name__)
+                    if explicit_provider:
+                        return error("provider_unavailable", "Selected provider could not classify the ticket", 502)
+        if prediction is None:
+            prediction = predict_ticket(text)
         review_required = prediction.confidence < REVIEW_THRESHOLD
         ticket_id = "T-" + uuid.uuid4().hex[:12].upper()
         case = {
@@ -145,6 +157,9 @@ def create_app(review_path=None, case_db_path=None):
             "review_required": review_required,
             "reply_confirmed": False,
             "model_version": prediction.model_version,
+            "requested_provider": provider,
+            "provider": used_provider,
+            "fallback_used": used_provider != provider,
         }
         with lock:
             store_case(case)
@@ -152,13 +167,18 @@ def create_app(review_path=None, case_db_path=None):
 
     @app.get("/cases")
     def cases_list():
-        """Return all persisted cases for the support dashboard, newest first."""
+        """Return cases by creation time; legacy cases with unknown dates come last."""
+        allowed = {"status", "category"}
+        if set(request.args) - allowed or any(len(request.args.getlist(k)) != 1 for k in request.args):
+            return error("invalid_filter", "Use one status and/or category filter")
+        status, category = request.args.get("status"), request.args.get("category")
+        if status is not None and status not in {"classified", "human_review", "reviewed"}:
+            return error("invalid_filter", "Unknown status")
+        if category is not None and (not category.strip() or len(category) > 120):
+            return error("invalid_filter", "category must be a non-empty value up to 120 characters")
         with lock:
-            with connect_cases() as connection:
-                rows = connection.execute(
-                    "SELECT payload FROM cases ORDER BY rowid DESC"
-                ).fetchall()
-        return jsonify([json.loads(row[0]) for row in rows])
+            cases = case_storage.list_cases(case_db, status=status, category=category)
+        return jsonify(cases)
 
     @app.get("/case/<ticket_id>")
     def case_detail(ticket_id):
